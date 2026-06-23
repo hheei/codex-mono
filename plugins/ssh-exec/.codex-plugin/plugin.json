@@ -1,0 +1,34 @@
+{
+  "name": "ssh-exec",
+  "version": "0.1.0",
+  "description": "Remote command execution over OpenSSH",
+  "author": {
+    "name": "hheei",
+    "url": "https://github.com/hheei"
+  },
+  "homepage": "https://github.com/hheei/ssh-exec",
+  "repository": "https://github.com/hheei/ssh-exec",
+  "license": "MIT",
+  "keywords": [
+    "ssh",
+    "mcp",
+    "codex",
+    "openssh"
+  ],
+  "interface": {
+    "displayName": "SSH Exec",
+    "shortDescription": "Run remote commands over OpenSSH.",
+    "longDescription": "SSH Exec provides one MCP tool, ssh_exec, for non-interactive remote command execution with bounded output and structured exit metadata.",
+    "developerName": "hheei",
+    "category": "Productivity",
+    "capabilities": [
+      "MCP",
+      "SSH"
+    ],
+    "websiteURL": "https://github.com/hheei/ssh-exec",
+    "defaultPrompt": "Run a remote command over SSH.",
+    "brandColor": "#111827",
+    "composerIcon": "./assets/icon.svg"
+  },
+  "mcpServers": "./.mcp.json"
+}

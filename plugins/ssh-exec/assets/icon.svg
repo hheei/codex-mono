@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="SSH Exec">
+  <rect width="256" height="256" rx="48" fill="#111827"/>
+  <path d="M52 82c0-13.255 10.745-24 24-24h104c13.255 0 24 10.745 24 24v92c0 13.255-10.745 24-24 24H76c-13.255 0-24-10.745-24-24V82z" fill="#0F172A" stroke="#38BDF8" stroke-width="10"/>
+  <path d="M77 96l34 32-34 32" fill="none" stroke="#E5E7EB" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M126 160h54" fill="none" stroke="#22C55E" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="190" cy="70" r="20" fill="#22C55E"/>
+  <path d="M181 70l6 6 13-15" fill="none" stroke="#052E16" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
