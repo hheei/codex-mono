@@ -75,13 +75,6 @@ export function createMcpServer(options: McpServerOptions = {}) {
     manager,
     async handle(message: JsonRpcRequest): Promise<JsonRpcResponse | undefined> {
       const id = message.id ?? null;
-      if (message.jsonrpc !== "2.0" || typeof message.method !== "string") {
-        return errorResponse(id, -32600, "Invalid Request");
-      }
-      if (message.id === undefined && message.method.startsWith("notifications/")) {
-        return undefined;
-      }
-
       try {
         switch (message.method) {
           case "initialize":
@@ -160,13 +153,14 @@ function toolResultFromSsh(result: SshExecResult, isError: boolean) {
     content: [{ type: "text", text }],
     structuredContent: structuredContentFromSsh(result, notice),
   };
-  if (isError) {
-    payload.isError = true;
-  }
+  if (isError) payload.isError = true;
   return payload;
 }
 
-function structuredContentFromSsh(result: SshExecResult, notice?: string): SshExecStructuredContent {
+function structuredContentFromSsh(
+  result: SshExecResult,
+  notice?: string,
+): SshExecStructuredContent {
   return {
     host: result.host,
     exitCode: result.exitCode,
@@ -194,9 +188,7 @@ function resultResponse(id: JsonRpcId, result: unknown): JsonRpcResponse {
 
 function errorResponse(id: JsonRpcId, code: number, message: string, data?: unknown): JsonRpcResponse {
   const error: JsonRpcResponse["error"] = { code, message };
-  if (data !== undefined) {
-    error.data = data;
-  }
+  if (data !== undefined) error.data = data;
   return { jsonrpc: "2.0", id, error };
 }
 
@@ -253,15 +245,17 @@ export async function runCleanupSshProcess(
 }
 
 async function handleLine(server: ReturnType<typeof createMcpServer>, line: string): Promise<void> {
-  if (!line.trim()) {
-    return;
-  }
-
+  if (!line.trim()) return;
   let response: JsonRpcResponse | undefined;
   try {
     response = await server.handle(JSON.parse(line));
   } catch (error) {
-    response = errorResponse(null, -32700, "Parse error", error instanceof Error ? error.message : String(error));
+    response = errorResponse(
+      null,
+      -32700,
+      "Parse error",
+      error instanceof Error ? error.message : String(error),
+    );
   }
 
   if (response) {
@@ -273,9 +267,13 @@ if (import.meta.main) {
   const server = createMcpServer();
   const runner = (args: string[], timeoutMs?: number) =>
     runCleanupSshProcess(server.manager.sshBin, args, timeoutMs, server.manager.sensitiveValues());
+
   let cleanupPromise: Promise<void> | undefined;
-  const cleanup = async () => {
-    cleanupPromise ??= server.manager.closeAll(runner);
+  const cleanup = async (budgetMs = 1_500) => {
+    cleanupPromise ??= Promise.race([
+      server.manager.closeAll(runner, Math.min(1_000, budgetMs)),
+      new Promise<void>((resolve) => setTimeout(resolve, budgetMs)),
+    ]).catch(() => undefined);
     await cleanupPromise;
   };
 
@@ -289,8 +287,13 @@ if (import.meta.main) {
     void cleanup().finally(() => process.exit(143));
   });
 
-  runStdio(server).catch((error) => {
-    process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
-    process.exit(1);
-  });
+  runStdio(server)
+    .then(async () => {
+      await cleanup();
+      process.exit(0);
+    })
+    .catch((error) => {
+      process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+      process.exit(1);
+    });
 }

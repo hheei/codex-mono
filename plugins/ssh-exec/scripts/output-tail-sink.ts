@@ -41,18 +41,22 @@ export class OutputTailSink {
   }
 
   dump(): TailDump {
-    let text = "";
-    let stdout = "";
-    let stderr = "";
+    const combined: Buffer[] = [];
+    const stdoutBuffers: Buffer[] = [];
+    const stderrBuffers: Buffer[] = [];
+
     for (const entry of this.entries) {
-      const value = entry.buffer.toString("utf8");
-      text += value;
+      combined.push(entry.buffer);
       if (entry.source === "stdout") {
-        stdout += value;
+        stdoutBuffers.push(entry.buffer);
       } else {
-        stderr += value;
+        stderrBuffers.push(entry.buffer);
       }
     }
+
+    const text = Buffer.concat(combined).toString("utf8");
+    const stdout = Buffer.concat(stdoutBuffers).toString("utf8");
+    const stderr = Buffer.concat(stderrBuffers).toString("utf8");
 
     return {
       text,
@@ -74,24 +78,41 @@ export class OutputTailSink {
       return;
     }
 
-    while (this.retainedBytes > this.maxBytes && this.entries.length > 0) {
-      this.didTruncate = true;
-      const excess = this.retainedBytes - this.maxBytes;
-      const first = this.entries[0];
-      if (first.buffer.length <= excess) {
-        this.retainedBytes -= first.buffer.length;
-        this.entries.shift();
-        continue;
-      }
-
-      const start = findUtf8BoundaryForward(first.buffer, excess);
-      this.retainedBytes -= start;
-      first.buffer = first.buffer.subarray(start);
-      if (first.buffer.length === 0) {
-        this.entries.shift();
-      }
-      break;
+    if (this.retainedBytes <= this.maxBytes) {
+      return;
     }
+
+    this.didTruncate = true;
+    this.rebuildTail();
+  }
+
+  private rebuildTail(): void {
+    const combined = Buffer.concat(this.entries.map((entry) => entry.buffer));
+    const safeStart = findUtf8TailStart(combined, this.maxBytes);
+    const sliced = combined.subarray(safeStart);
+
+    const rebuilt: TailEntry[] = [];
+    let offset = 0;
+    let retainedBytes = 0;
+
+    for (const entry of this.entries) {
+      const entryStart = offset;
+      const entryEnd = offset + entry.buffer.length;
+      offset = entryEnd;
+
+      if (entryEnd <= safeStart) continue;
+
+      const sliceStart = Math.max(safeStart, entryStart) - entryStart;
+      const sliceEnd = Math.min(combined.length, entryEnd) - entryStart;
+      const buffer = entry.buffer.subarray(sliceStart, sliceEnd);
+      if (buffer.length === 0) continue;
+
+      rebuilt.push({ source: entry.source, buffer });
+      retainedBytes += buffer.length;
+    }
+
+    this.entries = rebuilt.length > 0 || sliced.length === 0 ? rebuilt : [{ source: "stdout", buffer: sliced }];
+    this.retainedBytes = retainedBytes;
   }
 }
 
@@ -126,10 +147,36 @@ function countNewlines(text: string): number {
   return count;
 }
 
-function findUtf8BoundaryForward(buffer: Buffer, position: number): number {
-  let index = Math.max(0, Math.min(position, buffer.length));
-  while (index < buffer.length && (buffer[index] & 0xc0) === 0x80) {
-    index += 1;
+function findUtf8TailStart(buffer: Buffer, maxBytes: number): number {
+  if (buffer.length <= maxBytes) return 0;
+
+  let start = buffer.length - maxBytes;
+  while (start < buffer.length && (buffer[start] & 0xc0) === 0x80) {
+    start += 1;
   }
-  return index;
+
+  while (start < buffer.length) {
+    const width = utf8SequenceWidth(buffer[start]);
+    if (width === 0) {
+      start += 1;
+      continue;
+    }
+    if (start + width <= buffer.length) {
+      return start;
+    }
+    start += 1;
+    while (start < buffer.length && (buffer[start] & 0xc0) === 0x80) {
+      start += 1;
+    }
+  }
+
+  return buffer.length;
+}
+
+function utf8SequenceWidth(byte: number): number {
+  if ((byte & 0x80) === 0) return 1;
+  if ((byte & 0xe0) === 0xc0) return 2;
+  if ((byte & 0xf0) === 0xe0) return 3;
+  if ((byte & 0xf8) === 0xf0) return 4;
+  return 0;
 }

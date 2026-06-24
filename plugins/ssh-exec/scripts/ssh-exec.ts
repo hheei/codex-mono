@@ -63,12 +63,18 @@ export async function executeSshExec(
   const startedAt = Date.now();
   const host = validateHost(args.host);
   const timeoutMs = clampTimeoutSeconds(args.timeout) * 1000;
+  const deadlineMs = startedAt + timeoutMs;
   const session = manager.get(host);
   const runner = (sshArgs: string[], timeoutOverrideMs?: number) =>
-    runSshProcess(manager.sshBin, sshArgs, timeoutOverrideMs ?? timeoutMs, {
-      timeoutMode: options.timeoutMode ?? "throw",
-      sensitiveValues: manager.sensitiveValues(host),
-    });
+    runSshProcess(
+      manager.sshBin,
+      sshArgs,
+      remainingTimeoutMs(deadlineMs, timeoutOverrideMs ?? timeoutMs),
+      {
+        timeoutMode: options.timeoutMode ?? "throw",
+        sensitiveValues: manager.sensitiveValues(host),
+      },
+    );
 
   await manager.ensureConnected(host, runner);
   const result = await runner(manager.buildRunArgs(session, args.command));
@@ -107,6 +113,10 @@ export function validateHost(host: string): string {
 export function clampTimeoutSeconds(value: number | undefined): number {
   const raw = value ?? 10;
   return Math.min(3600, Math.max(1, raw));
+}
+
+function remainingTimeoutMs(deadlineMs: number, timeoutMs: number): number {
+  return Math.min(timeoutMs, Math.max(1, deadlineMs - Date.now()));
 }
 
 async function runSshProcess(
@@ -265,7 +275,7 @@ class StreamingRedactor {
         continue;
       }
 
-      const emitLength = this.pending.length - this.retainChars;
+      const emitLength = findSafeStringBoundary(this.pending, this.pending.length - this.retainChars);
       if (emitLength <= 0) break;
       output += this.pending.slice(0, emitLength);
       this.pending = this.pending.slice(emitLength);
@@ -300,4 +310,27 @@ class StreamingRedactor {
     }
     return match;
   }
+}
+
+function findSafeStringBoundary(text: string, index: number): number {
+  const clamped = Math.max(0, Math.min(index, text.length));
+  if (clamped <= 0 || clamped >= text.length) {
+    return clamped;
+  }
+
+  const previous = text.charCodeAt(clamped - 1);
+  const current = text.charCodeAt(clamped);
+  if (isHighSurrogate(previous) && isLowSurrogate(current)) {
+    return clamped - 1;
+  }
+
+  return clamped;
+}
+
+function isHighSurrogate(value: number): boolean {
+  return value >= 0xd800 && value <= 0xdbff;
+}
+
+function isLowSurrogate(value: number): boolean {
+  return value >= 0xdc00 && value <= 0xdfff;
 }
