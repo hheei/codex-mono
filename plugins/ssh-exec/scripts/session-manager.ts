@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { chmod, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -72,9 +71,9 @@ interface MountState {
 	lastUsed: number;
 }
 
-const DEFAULT_PLUGIN_DIR = join(homedir(), ".codex", "plugins", "ssh-exec");
-const DEFAULT_CONTROL_DIR = join(DEFAULT_PLUGIN_DIR, "control-master");
-const DEFAULT_MOUNT_DIR = join(DEFAULT_PLUGIN_DIR, "mounts");
+const DEFAULT_PLUGIN_DIR = join(homedir(), ".codex", "ssh-exec");
+const DEFAULT_CONTROL_DIR = DEFAULT_PLUGIN_DIR;
+const DEFAULT_MOUNT_DIR = DEFAULT_PLUGIN_DIR;
 
 export class SessionManager {
 	readonly sshBin: string;
@@ -504,9 +503,7 @@ function isMissingBinary(error: unknown): boolean {
 
 export function sanitizeHostForSocket(host: string): string {
 	const readable = host.replace(/[^A-Za-z0-9_.@:-]+/g, "_").replace(/^_+|_+$/g, "");
-	const prefix = (readable || "host").slice(0, 42);
-	const digest = createHash("sha1").update(host).digest("hex").slice(0, 12);
-	return `${prefix}-${digest}`;
+	return (readable || "host").slice(0, 80);
 }
 
 export function supportsSshfsMountPlatform(platform: NodeJS.Platform = process.platform): boolean {

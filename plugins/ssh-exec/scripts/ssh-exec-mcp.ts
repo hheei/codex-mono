@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 
+import { homedir } from "node:os";
+
 import { SessionManager } from "./session-manager";
 import type { ProcessResult, SshMountResult } from "./session-manager";
 import { executeSshMount, validateSshMountArgs, type SshMountArgs } from "./ssh-mount";
@@ -221,10 +223,11 @@ function structuredContentFromSsh(result: SshExecResult, notice?: string): SshEx
 
 function toolResultFromMount(result: SshMountResult) {
 	const verb = result.status === "reused" ? "Reused" : result.status === "remounted" ? "Remounted" : "Mounted";
+	const displayPath = formatDisplayPath(result.localPath);
 	const text = [
 		`${verb} ${result.host}.`,
-		`Local path: ${result.localPath}`,
-		`Next: use built-in read, edit, or write on files under ${result.localPath}`,
+		`Local path: ${displayPath}`,
+		`Next: use built-in read, edit, or write on files under ${displayPath}`,
 	].join("\n");
 
 	return {
@@ -235,6 +238,13 @@ function toolResultFromMount(result: SshMountResult) {
 			status: result.status,
 		} satisfies SshMountStructuredContent,
 	};
+}
+
+function formatDisplayPath(path: string): string {
+	const home = homedir();
+	if (path === home) return "~";
+	if (path.startsWith(`${home}/`)) return `~${path.slice(home.length)}`;
+	return path;
 }
 
 function requestedProtocolVersion(params: unknown): string {
