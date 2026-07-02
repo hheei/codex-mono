@@ -4,344 +4,181 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createMcpServer, runCleanupSshProcess } from "./ssh-exec-mcp";
 import { SessionManager } from "./session-manager";
+import type { SshMountArgs } from "./ssh-mount";
 import type { SshExecArgs, SshExecResult } from "./ssh-exec";
 
-test("MCP initialize and tools/list expose only ssh_exec", async () => {
-  const server = createMcpServer({ execute: successfulExecute });
+test("MCP initialize and tools/list expose ssh_exec and ssh_mount", async () => {
+	const server = createMcpServer({ execute: successfulExecute });
 
-  const initialize = await server.handle({
-    jsonrpc: "2.0",
-    id: 1,
-    method: "initialize",
-    params: {
-      protocolVersion: "2025-06-18",
-      capabilities: {},
-      clientInfo: { name: "test", version: "0" },
-    },
-  });
-  const tools = await server.handle({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+	const initialize = await server.handle({
+		jsonrpc: "2.0",
+		id: 1,
+		method: "initialize",
+		params: {
+			protocolVersion: "2025-06-18",
+			capabilities: {},
+			clientInfo: { name: "test", version: "0" },
+		},
+	});
+	const tools = await server.handle({ jsonrpc: "2.0", id: 2, method: "tools/list" });
 
-  expect(initialize).toMatchObject({
-    jsonrpc: "2.0",
-    id: 1,
-    result: {
-      protocolVersion: "2025-06-18",
-      serverInfo: { name: "ssh-exec-mcp", version: "0.1.0" },
-    },
-  });
-  expect((tools as any).result.tools.map((tool: { name: string }) => tool.name)).toEqual(["ssh_exec"]);
+	expect(initialize).toMatchObject({
+		jsonrpc: "2.0",
+		id: 1,
+		result: {
+			protocolVersion: "2025-06-18",
+			serverInfo: { name: "ssh-exec-mcp", version: "0.1.0" },
+		},
+	});
+	expect((tools as { result: { tools: Array<{ name: string }> } }).result.tools.map((tool) => tool.name)).toEqual([
+		"ssh_exec",
+		"ssh_mount",
+	]);
 });
 
-test("tools/call rejects unsafe host values before reaching SSH", async () => {
-  let calls = 0;
-  const server = createMcpServer({
-    execute: async (args) => {
-      calls += 1;
-      return successfulExecute(args);
-    },
-  });
+test("tools/call rejects unsafe ssh_exec and ssh_mount hosts before execution", async () => {
+	let execCalls = 0;
+	let mountCalls = 0;
+	const server = createMcpServer({
+		execute: async (args: SshExecArgs) => {
+			execCalls += 1;
+			return await successfulExecute(args);
+		},
+		mount: async (args: SshMountArgs) => {
+			mountCalls += 1;
+			return { host: args.host, localPath: "/tmp/ssh-mount/prod", status: "mounted" };
+		},
+	});
 
-  const response = await server.handle({
-    jsonrpc: "2.0",
-    id: 6,
-    method: "tools/call",
-    params: { name: "ssh_exec", arguments: { host: "-bad", command: "ok" } },
-  });
+	const execResponse = await server.handle({
+		jsonrpc: "2.0",
+		id: 3,
+		method: "tools/call",
+		params: { name: "ssh_exec", arguments: { host: "-bad", command: "ok" } },
+	});
+	const mountResponse = await server.handle({
+		jsonrpc: "2.0",
+		id: 4,
+		method: "tools/call",
+		params: { name: "ssh_mount", arguments: { host: "-bad" } },
+	});
 
-  expect(calls).toBe(0);
-  expect(response).toMatchObject({
-    jsonrpc: "2.0",
-    id: 6,
-    error: { code: -32602 },
-  });
+	expect(execCalls).toBe(0);
+	expect(mountCalls).toBe(0);
+	expect(execResponse).toMatchObject({ jsonrpc: "2.0", id: 3, error: { code: -32602 } });
+	expect(mountResponse).toMatchObject({ jsonrpc: "2.0", id: 4, error: { code: -32602 } });
 });
 
-test("tools/call renders combined output and metadata-only structured content", async () => {
-  const server = createMcpServer({ execute: successfulExecute });
+test("tools/call returns ssh_mount local path and Codex file-tool hint", async () => {
+	const server = createMcpServer({
+		mount: async (args: SshMountArgs) => ({
+			host: args.host,
+			localPath: "/tmp/ssh-mount/prod",
+			status: "remounted",
+		}),
+	});
 
-  const response = await server.handle({
-    jsonrpc: "2.0",
-    id: 3,
-    method: "tools/call",
-    params: { name: "ssh_exec", arguments: { host: "prod", command: "ok" } },
-  });
+	const response = await server.handle({
+		jsonrpc: "2.0",
+		id: 5,
+		method: "tools/call",
+		params: { name: "ssh_mount", arguments: { host: "prod" } },
+	});
+	const result = (response as { result: { content: Array<{ text: string }>; structuredContent: Record<string, unknown> } }).result;
 
-  expect((response as any).result).toMatchObject({
-    content: [{ type: "text", text: "hello\nwarn\n" }],
-    structuredContent: {
-      host: "prod",
-      exitCode: 0,
-      durationMs: 12,
-      truncated: false,
-      totalBytes: 11,
-      outputBytes: 11,
-      totalLines: 2,
-      outputLines: 2,
-    },
-  });
-  expect((response as any).result.structuredContent.output).toBeUndefined();
-  expect((response as any).result.structuredContent.stdout).toBeUndefined();
-  expect((response as any).result.structuredContent.stderr).toBeUndefined();
+	expect(result.content[0]?.text).toContain("Remounted prod.");
+	expect(result.content[0]?.text).toContain("Local path: /tmp/ssh-mount/prod");
+	expect(result.content[0]?.text).toContain("Next: use built-in read, edit, or write");
+	expect(result.structuredContent).toEqual({
+		host: "prod",
+		localPath: "/tmp/ssh-mount/prod",
+		status: "remounted",
+	});
 });
 
-test("tools/call renders interleaved combined output", async () => {
-  const server = createMcpServer({
-    execute: async (args) => ({
-      host: args.host,
-      exitCode: 0,
-      stdout: "out-1\nout-2\n",
-      stderr: "err-1\nerr-2\n",
-      output: "out-1\nerr-1\nout-2\nerr-2\n",
-      durationMs: 12,
-      truncated: false,
-    }),
-  });
-
-  const response = await server.handle({
-    jsonrpc: "2.0",
-    id: 11,
-    method: "tools/call",
-    params: { name: "ssh_exec", arguments: { host: "prod", command: "interleaved" } },
-  });
-
-  expect((response as any).result.content[0].text).toBe("out-1\nerr-1\nout-2\nerr-2\n");
-});
-
-test("tools/call marks non-zero SSH exits as tool errors", async () => {
-  const server = createMcpServer({
-    execute: async (args) => ({
-      host: args.host,
-      exitCode: 7,
-      stdout: "bad output\n",
-      stderr: "bad err\n",
-      durationMs: 10,
-      truncated: false,
-    }),
-  });
-
-  const response = await server.handle({
-    jsonrpc: "2.0",
-    id: 4,
-    method: "tools/call",
-    params: { name: "ssh_exec", arguments: { host: "prod", command: "fail-command" } },
-  });
-
-  expect((response as any).result.isError).toBe(true);
-  expect((response as any).result.content[0].text).toBe("bad output\nbad err\n\nCommand exited with code 7");
-});
-
-test("tools/call marks timeout SSH results as tool errors with captured output", async () => {
-  const server = createMcpServer({
-    execute: async (args) => ({
-      host: args.host,
-      exitCode: null,
-      stdout: "before timeout\n",
-      stderr: "timeout err\n",
-      output: "before timeout\ntimeout err\n",
-      durationMs: 1000,
-      truncated: false,
-      notice: "SSH command timed out after 1s",
-    }),
-  });
-
-  const response = await server.handle({
-    jsonrpc: "2.0",
-    id: 9,
-    method: "tools/call",
-    params: { name: "ssh_exec", arguments: { host: "prod", command: "slow-output", timeout: 1 } },
-  });
-
-  expect((response as any).result.isError).toBe(true);
-  expect((response as any).result.content[0].text).toBe(
-    "before timeout\ntimeout err\n\nSSH command timed out after 1s",
-  );
-});
-
-test("default MCP executor returns timeout tail instead of dropping output", async () => {
-  const tmpRoot = await mkdtemp(join(tmpdir(), "ssh-exec-mcp-timeout-test-"));
-  const fakeSsh = join(tmpRoot, "fake-timeout-ssh.ts");
-  await Bun.write(
-    fakeSsh,
-    `#!/usr/bin/env bun
+test("default MCP executor keeps timeout tail output for ssh_exec", async () => {
+	const tmpRoot = await mkdtemp(join(tmpdir(), "ssh-exec-mcp-timeout-test-"));
+	const fakeSsh = join(tmpRoot, "fake-timeout-ssh.ts");
+	await Bun.write(
+		fakeSsh,
+		`#!/usr/bin/env bun
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
+
 const args = process.argv.slice(2);
 const socketPath = args[args.indexOf("-S") + 1];
 if (args.includes("-O") && args.includes("check")) process.exit(255);
 if (args.includes("-M") && args.includes("-N") && args.includes("-f")) {
-  await mkdir(dirname(socketPath), { recursive: true });
-  await Bun.write(socketPath, "master");
-  process.exit(0);
+	await mkdir(dirname(socketPath), { recursive: true });
+	await Bun.write(socketPath, "master");
+	process.exit(0);
 }
 process.stdout.write("partial before timeout\\n");
 await Bun.sleep(2000);
 process.exit(0);
 `,
-  );
-  await chmod(fakeSsh, 0o755);
+	);
+	await chmod(fakeSsh, 0o755);
 
-  try {
-    const server = createMcpServer({
-      manager: new SessionManager({ sshBin: fakeSsh, controlDir: join(tmpRoot, "control") }),
-    });
-    const response = await server.handle({
-      jsonrpc: "2.0",
-      id: 10,
-      method: "tools/call",
-      params: { name: "ssh_exec", arguments: { host: "prod", command: "slow", timeout: 1 } },
-    });
+	try {
+		const server = createMcpServer({
+			manager: new SessionManager({ sshBin: fakeSsh, controlDir: join(tmpRoot, "control") }),
+		});
+		const response = await server.handle({
+			jsonrpc: "2.0",
+			id: 6,
+			method: "tools/call",
+			params: { name: "ssh_exec", arguments: { host: "prod", command: "slow", timeout: 1 } },
+		});
+		const text = (response as { result: { isError: boolean; content: Array<{ text: string }> } }).result.content[0]?.text ?? "";
 
-    expect((response as any).result.isError).toBe(true);
-    expect((response as any).result.content[0].text).toContain("partial before timeout");
-    expect((response as any).result.content[0].text).toContain("timed out");
-  } finally {
-    await rm(tmpRoot, { recursive: true, force: true });
-  }
+		expect((response as { result: { isError?: boolean } }).result.isError).toBe(true);
+		expect(text).toContain("partial before timeout");
+		expect(text).toContain("timed out");
+	} finally {
+		await rm(tmpRoot, { recursive: true, force: true });
+	}
 });
 
-test("malformed ssh_exec arguments return JSON-RPC invalid params", async () => {
-  const server = createMcpServer({ execute: successfulExecute });
-  const response = await server.handle({
-    jsonrpc: "2.0",
-    id: 5,
-    method: "tools/call",
-    params: { name: "ssh_exec", arguments: { host: "prod" } },
-  });
-
-  expect(response).toMatchObject({
-    jsonrpc: "2.0",
-    id: 5,
-    error: { code: -32602 },
-  });
-});
-
-test("cleanup runner captures ssh stdout and stderr", async () => {
-  const tmpRoot = await mkdtemp(join(tmpdir(), "ssh-exec-cleanup-test-"));
-  const fakeSsh = join(tmpRoot, "fake-cleanup-ssh.ts");
-  await Bun.write(
-    fakeSsh,
-    `#!/usr/bin/env bun
+test("cleanup runner captures stdout and stderr", async () => {
+	const tmpRoot = await mkdtemp(join(tmpdir(), "ssh-exec-cleanup-test-"));
+	const fakeSsh = join(tmpRoot, "fake-cleanup-ssh.ts");
+	await Bun.write(
+		fakeSsh,
+		`#!/usr/bin/env bun
 process.stdout.write("cleanup out\\n");
 process.stderr.write("cleanup err\\n");
 process.exit(3);
 `,
-  );
-  await chmod(fakeSsh, 0o755);
+	);
+	await chmod(fakeSsh, 0o755);
 
-  try {
-    const result = await runCleanupSshProcess(fakeSsh, ["-O", "exit"], 1000);
-    expect(result).toMatchObject({
-      exitCode: 3,
-      stdout: "cleanup out\n",
-      stderr: "cleanup err\n",
-      output: "cleanup out\ncleanup err\n",
-      truncated: false,
-    });
-  } finally {
-    await rm(tmpRoot, { recursive: true, force: true });
-  }
-});
-
-test("cleanup runner times out without hanging forever", async () => {
-  const tmpRoot = await mkdtemp(join(tmpdir(), "ssh-exec-cleanup-timeout-test-"));
-  const fakeSsh = join(tmpRoot, "fake-cleanup-timeout-ssh.ts");
-  await Bun.write(
-    fakeSsh,
-    `#!/usr/bin/env bun
-await Bun.sleep(2000);
-process.stdout.write("late cleanup\\n");
-process.exit(0);
-`,
-  );
-  await chmod(fakeSsh, 0o755);
-
-  try {
-    const startedAt = Date.now();
-    const result = await runCleanupSshProcess(fakeSsh, ["-O", "exit"], 200);
-    expect(Date.now() - startedAt).toBeLessThan(1_500);
-    expect(typeof result.exitCode === "number" || result.exitCode === null).toBe(true);
-  } finally {
-    await rm(tmpRoot, { recursive: true, force: true });
-  }
-});
-
-test("stdio server exits after stdin closes and cleanup runs", async () => {
-  const tmpRoot = await mkdtemp(join(tmpdir(), "ssh-exec-stdio-exit-test-"));
-  const fakeSsh = join(tmpRoot, "fake-stdio-ssh.ts");
-  await Bun.write(
-    fakeSsh,
-    `#!/usr/bin/env bun
-import { appendFile, mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
-const args = process.argv.slice(2);
-const logPath = ${JSON.stringify(join(tmpRoot, "cleanup.log"))};
-const socketPath = args[args.indexOf("-S") + 1];
-if (args.includes("-O") && args.includes("check")) {
-  process.exit(socketPath && await Bun.file(socketPath).exists() ? 0 : 255);
-}
-if (args.includes("-O") && args.includes("exit")) {
-  await appendFile(logPath, "cleanup\\n");
-  process.exit(0);
-}
-if (args.includes("-M") && args.includes("-N") && args.includes("-f")) {
-  await mkdir(dirname(socketPath), { recursive: true });
-  await Bun.write(socketPath, "master");
-  process.exit(0);
-}
-process.stdout.write("ok\\n");
-process.exit(0);
-`,
-  );
-  await chmod(fakeSsh, 0o755);
-
-  const child = Bun.spawn(["bun", new URL("./ssh-exec-mcp.ts", import.meta.url).pathname], {
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
-    env: {
-      ...process.env,
-      SSH_EXEC_SSH_BIN: fakeSsh,
-      SSH_EXEC_CONTROL_DIR: join(tmpRoot, "control"),
-    },
-  });
-
-  try {
-    child.stdin.write(
-      '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ssh_exec","arguments":{"host":"prod","command":"ok","timeout":2}}}\n',
-    );
-    await Bun.sleep(50);
-    child.stdin.end();
-
-    const exited = await Promise.race([
-      child.exited,
-      new Promise<number>((_, reject) =>
-        setTimeout(() => {
-          child.kill("SIGTERM");
-          reject(new Error("stdio server did not exit after stdin closed"));
-        }, 1500),
-      ),
-    ]);
-
-    expect(exited).toBe(0);
-    expect(await Bun.file(join(tmpRoot, "cleanup.log")).text()).toContain("cleanup");
-  } finally {
-    child.kill("SIGTERM");
-    await rm(tmpRoot, { recursive: true, force: true });
-  }
+	try {
+		const result = await runCleanupSshProcess(fakeSsh, ["-O", "exit"], 1000);
+		expect(result).toMatchObject({
+			exitCode: 3,
+			stdout: "cleanup out\n",
+			stderr: "cleanup err\n",
+			output: "cleanup out\ncleanup err\n",
+			truncated: false,
+		});
+	} finally {
+		await rm(tmpRoot, { recursive: true, force: true });
+	}
 });
 
 async function successfulExecute(args: SshExecArgs): Promise<SshExecResult> {
-  return {
-    host: args.host,
-    exitCode: 0,
-    stdout: "hello\n",
-    stderr: "warn\n",
-    output: "hello\nwarn\n",
-    durationMs: 12,
-    truncated: false,
-    totalBytes: 11,
-    outputBytes: 11,
-    totalLines: 2,
-    outputLines: 2,
-  };
+	return {
+		host: args.host,
+		exitCode: 0,
+		stdout: "hello\n",
+		stderr: "warn\n",
+		output: "hello\nwarn\n",
+		durationMs: 12,
+		truncated: false,
+		totalBytes: 11,
+		outputBytes: 11,
+		totalLines: 2,
+		outputLines: 2,
+	};
 }

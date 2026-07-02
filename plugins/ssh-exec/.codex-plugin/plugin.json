@@ -1,7 +1,7 @@
 {
   "name": "ssh-exec",
-  "version": "0.1.0",
-  "description": "Remote command execution over OpenSSH",
+  "version": "0.1.0+codex.20260702153510",
+  "description": "Remote command execution and sshfs mounting over OpenSSH",
   "author": {
     "name": "hheei",
     "url": "https://github.com/hheei"
@@ -13,12 +13,13 @@
     "ssh",
     "mcp",
     "codex",
-    "openssh"
+    "openssh",
+    "sshfs"
   ],
   "interface": {
     "displayName": "SSH Exec",
-    "shortDescription": "Run remote commands over OpenSSH.",
-    "longDescription": "SSH Exec provides one MCP tool, ssh_exec, for non-interactive remote command execution with bounded output and structured exit metadata.",
+    "shortDescription": "Run remote commands and mount remote files over OpenSSH.",
+    "longDescription": "SSH Exec provides two tools: ssh_mount for mounting a remote host locally so Codex can use built-in file tools, and ssh_exec for remote commands such as inspection, verification, and service control.",
     "developerName": "hheei",
     "category": "Productivity",
     "capabilities": [
@@ -26,7 +27,7 @@
       "SSH"
     ],
     "websiteURL": "https://github.com/hheei/ssh-exec",
-    "defaultPrompt": "Run a remote command over SSH.",
+    "defaultPrompt": "Use ssh_mount before editing remote files, then use ssh_exec to inspect or verify the remote host.",
     "brandColor": "#111827",
     "composerIcon": "./assets/icon.svg"
   },
