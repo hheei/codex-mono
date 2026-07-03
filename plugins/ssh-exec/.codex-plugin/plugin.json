@@ -1,6 +1,6 @@
 {
   "name": "ssh-exec",
-  "version": "0.1.0+codex.20260702153510",
+  "version": "0.1.0+codex.20260702182935",
   "description": "Remote command execution and sshfs mounting over OpenSSH",
   "author": {
     "name": "hheei",

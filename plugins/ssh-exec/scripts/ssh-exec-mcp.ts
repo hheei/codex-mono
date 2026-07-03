@@ -42,6 +42,7 @@ interface McpServerOptions {
 interface SshExecStructuredContent {
 	host: string;
 	exitCode: number | null;
+	output?: string;
 	durationMs: number;
 	truncated: boolean;
 	totalBytes?: number;
@@ -211,6 +212,7 @@ function structuredContentFromSsh(result: SshExecResult, notice?: string): SshEx
 	return {
 		host: result.host,
 		exitCode: result.exitCode,
+		output: result.output,
 		durationMs: result.durationMs,
 		truncated: result.truncated,
 		totalBytes: result.totalBytes,
