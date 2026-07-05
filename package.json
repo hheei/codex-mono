@@ -1,6 +1,6 @@
 {
   "name": "@hheei/ssh-exec",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "SSH host discovery, remote exec, sshfs mount, MCP server, and pi-extension for Codex and pi",
   "type": "module",
   "license": "MIT",

@@ -70,10 +70,10 @@ interface SshHostStructuredContent {
 }
 
 const PROTOCOL_VERSION = "2025-06-18";
-const SERVER_INFO = { name: "ssh", version: "0.3.1" };
+const SERVER_INFO = { name: "ssh", version: "0.3.2" };
 
 const SSH_EXEC_TOOL = {
-	name: "exec",
+	name: "ssh_exec",
 	description:
 		"Run a non-interactive command on a remote OpenSSH host. If you are unsure whether the alias exists, use host first. Returns bounded output and exit metadata. Timeout defaults to 10 seconds.",
 	inputSchema: {
@@ -88,7 +88,7 @@ const SSH_EXEC_TOOL = {
 };
 
 const SSH_MOUNT_TOOL = {
-	name: "mount",
+	name: "ssh_mount",
 	description:
 		"Mount a remote OpenSSH host locally through sshfs so built-in read, edit, and write tools can work on the returned local path. If the alias is uncertain, use host first.",
 	inputSchema: {
@@ -101,7 +101,7 @@ const SSH_MOUNT_TOOL = {
 };
 
 const SSH_HOST_TOOL = {
-	name: "host",
+	name: "ssh_host",
 	description:
 		"Find SSH hosts from the local OpenSSH config. Use `*` to list all hosts, or pass a regex-like pattern such as `ileqm|sccpu` to filter aliases.",
 	inputSchema: {
@@ -168,7 +168,7 @@ async function handleToolCall(
 	}
 
 	const record = params as Record<string, unknown>;
-	if (record.name === "host") {
+	if (record.name === "ssh_host") {
 		try {
 			const pattern = validateSshHostPattern(record.arguments);
 			const hosts = await findHosts(pattern);
@@ -183,7 +183,7 @@ async function handleToolCall(
 		}
 	}
 
-	if (record.name === "mount") {
+	if (record.name === "ssh_mount") {
 		let args: SshMountArgs;
 		try {
 			args = validateSshMountArgs(record.arguments);
@@ -203,7 +203,7 @@ async function handleToolCall(
 		}
 	}
 
-	if (record.name !== "exec") {
+	if (record.name !== "ssh_exec") {
 		return errorResponse(id, -32602, "Unknown tool");
 	}
 

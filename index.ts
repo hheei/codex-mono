@@ -7,7 +7,7 @@ export default function register(pi: ExtensionAPI) {
 	const server = createMcpServer();
 
 	pi.registerTool({
-		name: "host",
+	name: "ssh_host",
 		label: "SSH Host",
 		description: "Find configured SSH aliases from the local OpenSSH config.",
 		promptSnippet: "Find configured SSH aliases before connecting to a remote host.",
@@ -22,14 +22,14 @@ export default function register(pi: ExtensionAPI) {
 				jsonrpc: "2.0",
 				id: 1,
 				method: "tools/call",
-				params: { name: "host", arguments: params },
+				params: { name: "ssh_host", arguments: params },
 			});
 			return normalizePiToolResult(response);
 		},
 	});
 
 	pi.registerTool({
-		name: "mount",
+	name: "ssh_mount",
 		label: "SSH Mount",
 		description: "Mount a remote host locally through sshfs.",
 		promptSnippet: "Mount a remote SSH host so local file tools can operate on it.",
@@ -42,14 +42,14 @@ export default function register(pi: ExtensionAPI) {
 				jsonrpc: "2.0",
 				id: 1,
 				method: "tools/call",
-				params: { name: "mount", arguments: params },
+				params: { name: "ssh_mount", arguments: params },
 			});
 			return normalizePiToolResult(response);
 		},
 	});
 
 	pi.registerTool({
-		name: "exec",
+	name: "ssh_exec",
 		label: "SSH Exec",
 		description: "Run a non-interactive command on a remote OpenSSH host.",
 		promptSnippet: "Run a remote SSH command for inspection, verification, or service control.",
@@ -64,7 +64,7 @@ export default function register(pi: ExtensionAPI) {
 				jsonrpc: "2.0",
 				id: 1,
 				method: "tools/call",
-				params: { name: "exec", arguments: params },
+				params: { name: "ssh_exec", arguments: params },
 			});
 			return normalizePiToolResult(response);
 		},

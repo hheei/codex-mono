@@ -8,11 +8,11 @@
 
 It exposes three SSH-oriented tools:
 
-- `host`: search configured SSH aliases from local OpenSSH config
-- `mount`: mount a remote host locally through `sshfs`
-- `exec`: run non-interactive remote commands over SSH
+- `ssh_host`: search configured SSH aliases from local OpenSSH config
+- `ssh_mount`: mount a remote host locally through `sshfs`
+- `ssh_exec`: run non-interactive remote commands over SSH
 
-If you are not sure whether a remote alias exists, use `host` first.
+If you are not sure whether a remote alias exists, use `ssh_host` first.
 
 ## Install in Codex
 
@@ -59,9 +59,9 @@ The pi extension entrypoint is `index.ts`.
 
 It registers these tools:
 
-- `host(ssh_host: string)`
-- `mount(host: string)`
-- `exec(host: string, command: string, timeout?: number)`
+- `ssh_host(ssh_host: string)`
+- `ssh_mount(host: string)`
+- `ssh_exec(host: string, command: string, timeout?: number)`
 
 Note:
 
@@ -101,15 +101,15 @@ Reference config:
 
 - `examples/pi-agent.mcp.json`
 
-## `host` Tool
+## `ssh_host` Tool
 
-`host` is the discovery tool to use when you are not sure whether a remote host exists.
+`ssh_host` is the discovery tool to use when you are not sure whether a remote host exists.
 
 Examples:
 
-- `host(ssh_host: "*")`: list all configured hosts
-- `host(ssh_host: "ileqm")`: return the exact or matching host if it exists
-- `host(ssh_host: "ileqm|sccpu")`: regex search for multiple hosts
+- `ssh_host(ssh_host: "*")`: list all configured hosts
+- `ssh_host(ssh_host: "ileqm")`: return the exact or matching host if it exists
+- `ssh_host(ssh_host: "ileqm|sccpu")`: regex search for multiple hosts
 
 Return examples:
 
@@ -118,21 +118,21 @@ Return examples:
 
 ## Recommended Workflow
 
-1. Call `host` with `ssh_host: "*"` or a regex such as `ileqm|sccpu`.
+1. Call `ssh_host` with `ssh_host: "*"` or a regex such as `ileqm|sccpu`.
 2. Pick the alias you want from results like `alias (user@hostname)`.
-3. Call `mount` before editing remote files.
-4. Call `exec` to inspect state, verify changes, or reload services.
+3. Call `ssh_mount` before editing remote files.
+4. Call `ssh_exec` to inspect state, verify changes, or reload services.
 
 Example flow:
 
-- `host(ssh_host: "prod|staging")`
-- `mount(host: "prod")`
+- `ssh_host(ssh_host: "prod|staging")`
+- `ssh_mount(host: "prod")`
 - edit files under the returned local path
-- `exec(host: "prod", command: "systemctl reload nginx")`
+- `ssh_exec(host: "prod", command: "systemctl reload nginx")`
 
 ## Behavior Notes
 
-- `host` reads local OpenSSH config; it does not verify reachability
-- `mount` mounts the remote root `/`
-- `exec` returns bounded output and exit metadata
+- `ssh_host` reads local OpenSSH config; it does not verify reachability
+- `ssh_mount` mounts the remote root `/`
+- `ssh_exec` returns bounded output and exit metadata
 - SSH keepalive defaults are `ServerAliveInterval=300` and `ServerAliveCountMax=3`
