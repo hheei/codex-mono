@@ -43,6 +43,7 @@ interface McpServerOptions {
 	execute?: (args: SshExecArgs) => Promise<SshExecResult>;
 	mount?: (args: SshMountArgs) => Promise<SshMountResult>;
 	findHosts?: (pattern: string) => Promise<SshHostRecord[]>;
+	disabledHosts?: Iterable<string>;
 	manager?: SessionManager;
 }
 
@@ -70,7 +71,7 @@ interface SshHostStructuredContent {
 }
 
 const PROTOCOL_VERSION = "2025-06-18";
-const SERVER_INFO = { name: "ssh", version: "0.4.1" };
+const SERVER_INFO = { name: "ssh", version: "0.5.0" };
 
 const SSH_EXEC_TOOL = {
 	name: "ssh_exec",
@@ -124,8 +125,9 @@ export function createMcpServer(options: McpServerOptions = {}) {
 			await runCleanupSshProcess(manager.sshBin, runnerArgs, timeoutMs, manager.sensitiveValues(args.host));
 		return await executeSshMount(manager, args, runner);
 	});
+	const disabledHosts = new Set(options.disabledHosts ?? disabledHostsFromEnv());
 	const findHosts = options.findHosts ?? (async (pattern: string) => await findConfiguredHosts(pattern));
-
+	const filteredFindHosts = async (pattern: string) => filterDisabledHosts(await findHosts(pattern), disabledHosts);
 	return {
 		manager,
 		async handle(message: JsonRpcRequest): Promise<JsonRpcResponse | undefined> {
@@ -145,7 +147,7 @@ export function createMcpServer(options: McpServerOptions = {}) {
 					case "tools/list":
 						return resultResponse(id, { tools: [SSH_EXEC_TOOL, SSH_MOUNT_TOOL, SSH_HOST_TOOL] });
 					case "tools/call":
-						return await handleToolCall(id, message.params, execute, mount, findHosts);
+						return await handleToolCall(id, message.params, execute, mount, filteredFindHosts, disabledHosts);
 					default:
 						return errorResponse(id, -32601, `Method not found: ${message.method}`);
 				}
@@ -162,6 +164,7 @@ async function handleToolCall(
 	execute: (args: SshExecArgs) => Promise<SshExecResult>,
 	mount: (args: SshMountArgs) => Promise<SshMountResult>,
 	findHosts: (pattern: string) => Promise<SshHostRecord[]>,
+	disabledHosts: Set<string>,
 ): Promise<JsonRpcResponse> {
 	if (!params || typeof params !== "object" || Array.isArray(params)) {
 		return errorResponse(id, -32602, "tools/call params must be an object");
@@ -190,6 +193,9 @@ async function handleToolCall(
 		} catch (error) {
 			return errorResponse(id, -32602, error instanceof Error ? error.message : String(error));
 		}
+		if (disabledHosts.has(args.host)) {
+			return resultResponse(id, disabledHostToolResult(args.host));
+		}
 
 		try {
 			const result = await mount(args);
@@ -212,6 +218,9 @@ async function handleToolCall(
 		args = validateSshExecArgs(record.arguments);
 	} catch (error) {
 		return errorResponse(id, -32602, error instanceof Error ? error.message : String(error));
+	}
+	if (disabledHosts.has(args.host)) {
+		return resultResponse(id, disabledHostToolResult(args.host));
 	}
 
 	try {
@@ -284,6 +293,33 @@ function toolResultFromHostLookup(pattern: string, hosts: SshHostRecord[]) {
 	return {
 		content: [{ type: "text", text }],
 		structuredContent: { hosts } satisfies SshHostStructuredContent,
+	};
+}
+
+function disabledHostsFromEnv(): string[] {
+	const raw = process.env.SSH_EXEC_DISABLED_HOSTS?.trim() ?? "";
+	if (!raw) return [];
+
+	try {
+		const parsed = JSON.parse(raw);
+		if (Array.isArray(parsed)) return parsed.filter((host): host is string => typeof host === "string" && host.trim() !== "");
+	} catch {
+		// Keep accepting the old comma/whitespace form for compatibility.
+	}
+
+	return raw.split(/[,\s]+/).map((host) => host.trim()).filter(Boolean);
+}
+
+function filterDisabledHosts(hosts: SshHostRecord[], disabledHosts: Set<string>): SshHostRecord[] {
+	if (disabledHosts.size === 0) return hosts;
+	return hosts.filter((host) => !disabledHosts.has(host.alias));
+}
+
+function disabledHostToolResult(host: string) {
+	return {
+		isError: true,
+		content: [{ type: "text", text: `SSH host ${host} is disabled by SSH_EXEC_DISABLED_HOSTS.` }],
+		structuredContent: { host, disabled: true },
 	};
 }
 

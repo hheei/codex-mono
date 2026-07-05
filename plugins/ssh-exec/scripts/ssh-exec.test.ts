@@ -160,6 +160,12 @@ test("clampTimeoutSeconds keeps timeouts in supported range", () => {
 	expect(clampTimeoutSeconds(99999)).toBe(3600);
 });
 
+test("clampTimeoutSeconds reads default timeout from environment", async () => {
+	await withEnv({ SSH_EXEC_COMMAND_TIMEOUT_SECONDS: "42" }, async () => {
+		expect(clampTimeoutSeconds(undefined)).toBe(42);
+	});
+});
+
 test("SessionManager defaults give SSH master setup up to 30 seconds total", async () => {
 	const timeouts: number[] = [];
 	const manager = new SessionManager({
@@ -185,6 +191,24 @@ test("SessionManager defaults give SSH master setup up to 30 seconds total", asy
 	expect(timeouts[1]).toBeLessThanOrEqual(30_000);
 });
 
+test("SessionManager reads SSH defaults from environment", async () => {
+	await withEnv({
+		SSH_EXEC_CONTROL_PERSIST_SECONDS: "7200",
+		SSH_EXEC_CONNECT_TIMEOUT_SECONDS: "12",
+		SSH_EXEC_CONNECTION_ATTEMPTS: "4",
+		SSH_EXEC_SERVER_ALIVE_INTERVAL_SECONDS: "60",
+		SSH_EXEC_SERVER_ALIVE_COUNT_MAX: "5",
+	}, async () => {
+		const manager = new SessionManager({ sshBin: fakeSshPath });
+
+		expect(manager.controlPersist).toBe("7200");
+		expect(manager.connectTimeoutSeconds).toBe(12);
+		expect(manager.connectionAttempts).toBe(4);
+		expect(manager.serverAliveIntervalSeconds).toBe(60);
+		expect(manager.serverAliveCountMax).toBe(5);
+	});
+});
+
 test("SessionManager defaults mount root under ~/.cache/ssh-exec", () => {
 	const manager = new SessionManager({ sshBin: fakeSshPath });
 	expect(manager.getMountPath("prod")).toContain("/.cache/ssh-exec/");
@@ -205,6 +229,24 @@ test("ensureConnected blocks only after repeated master-start failures", async (
 	await expect(manager.ensureConnected("prod", runner)).rejects.toThrow(/simulated connect timeout/i);
 	await expect(manager.ensureConnected("prod", runner)).rejects.toThrow(/temporarily blocked/i);
 });
+
+async function withEnv<T>(env: Record<string, string | undefined>, fn: () => Promise<T>): Promise<T> {
+	const previous = new Map<string, string | undefined>();
+	for (const [key, value] of Object.entries(env)) {
+		previous.set(key, process.env[key]);
+		if (value === undefined) delete process.env[key];
+		else process.env[key] = value;
+	}
+
+	try {
+		return await fn();
+	} finally {
+		for (const [key, value] of previous) {
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+		}
+	}
+}
 
 async function readFakeLog(): Promise<Array<{ kind: string; args: string[] }>> {
 	const raw = await readFile(fakeLogPath, "utf8").catch(() => "");

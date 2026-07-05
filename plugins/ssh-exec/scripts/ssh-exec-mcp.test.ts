@@ -28,7 +28,7 @@ test("MCP initialize tools/list expose ssh_exec, ssh_mount, and ssh_host", async
 		id: 1,
 		result: {
 			protocolVersion: "2025-06-18",
-			serverInfo: { name: "ssh", version: "0.4.1" },
+			serverInfo: { name: "ssh", version: "0.5.0" },
 		},
 	});
 	expect((tools as { result: { tools: Array<{ name: string }> } }).result.tools.map((tool) => tool.name)).toEqual([
@@ -248,6 +248,71 @@ test("tools/call returns ssh_mount errors without fake mounted payload", async (
 		},
 	});
 });
+test("MCP disabled hosts from environment filter lookup and block calls", async () => {
+	let execCalls = 0;
+	let mountCalls = 0;
+
+	await withEnv({ SSH_EXEC_DISABLED_HOSTS: JSON.stringify(["prod", "staging"]) }, async () => {
+		const server = createMcpServer({
+			findHosts: async () => [
+				{ alias: "prod", hostname: "prod.example.com", display: "prod (prod.example.com)" },
+				{ alias: "dev", hostname: "dev.example.com", display: "dev (dev.example.com)" },
+			],
+			execute: async (args: SshExecArgs) => {
+				execCalls += 1;
+				return await successfulExecute(args);
+			},
+			mount: async (args: SshMountArgs) => {
+				mountCalls += 1;
+				return { host: args.host, localPath: "/tmp/ssh-mount/prod", status: "mounted" };
+			},
+		});
+
+		const hostResponse = await server.handle({
+			jsonrpc: "2.0",
+			id: 10,
+			method: "tools/call",
+			params: { name: "ssh_host", arguments: { ssh_host: "*" } },
+		});
+		const execResponse = await server.handle({
+			jsonrpc: "2.0",
+			id: 11,
+			method: "tools/call",
+			params: { name: "ssh_exec", arguments: { host: "prod", command: "echo hi" } },
+		});
+		const mountResponse = await server.handle({
+			jsonrpc: "2.0",
+			id: 12,
+			method: "tools/call",
+			params: { name: "ssh_mount", arguments: { host: "prod" } },
+		});
+
+		expect((hostResponse as { result: { content: Array<{ text: string }> } }).result.content[0]?.text).toBe("dev (dev.example.com)");
+		expect(execResponse).toMatchObject({ result: { isError: true } });
+		expect(mountResponse).toMatchObject({ result: { isError: true } });
+	});
+
+	expect(execCalls).toBe(0);
+	expect(mountCalls).toBe(0);
+});
+
+async function withEnv<T>(env: Record<string, string | undefined>, fn: () => Promise<T>): Promise<T> {
+	const previous = new Map<string, string | undefined>();
+	for (const [key, value] of Object.entries(env)) {
+		previous.set(key, process.env[key]);
+		if (value === undefined) delete process.env[key];
+		else process.env[key] = value;
+	}
+
+	try {
+		return await fn();
+	} finally {
+		for (const [key, value] of previous) {
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+		}
+	}
+}
 
 function successfulExecute(args: SshExecArgs): Promise<SshExecResult> {
 	return Promise.resolve({

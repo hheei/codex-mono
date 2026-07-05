@@ -110,22 +110,25 @@ export class SessionManager {
 		this.controlDir = options.controlDir ?? process.env.SSH_EXEC_CONTROL_DIR ?? DEFAULT_CONTROL_DIR;
 		this.mountDir = options.mountDir ?? process.env.SSH_EXEC_MOUNT_DIR ?? DEFAULT_MOUNT_DIR;
 		this.platform = options.platform ?? process.platform;
-		this.controlPersist = options.controlPersist ?? "3600";
+		this.controlPersist = options.controlPersist ?? envString("SSH_EXEC_CONTROL_PERSIST_SECONDS", envString("SSH_EXEC_CONTROL_PERSIST", "3600"));
 		this.supportsControlMaster = options.supportsControlMaster ?? this.platform !== "win32";
 		this.connectTimeoutSeconds = clampPositiveInt(
-			options.connectTimeoutSeconds,
+			options.connectTimeoutSeconds ?? envNumber("SSH_EXEC_CONNECT_TIMEOUT_SECONDS"),
 			DEFAULT_CONNECT_TIMEOUT_SECONDS,
 		);
-		this.connectionAttempts = clampPositiveInt(options.connectionAttempts, 2);
+		this.connectionAttempts = clampPositiveInt(
+			options.connectionAttempts ?? envNumber("SSH_EXEC_CONNECTION_ATTEMPTS"),
+			2,
+		);
 		this.serverAliveIntervalSeconds = clampPositiveInt(
-			options.serverAliveIntervalSeconds,
+			options.serverAliveIntervalSeconds ?? envNumber("SSH_EXEC_SERVER_ALIVE_INTERVAL_SECONDS"),
 			DEFAULT_SERVER_ALIVE_INTERVAL_SECONDS,
 		);
 		this.serverAliveCountMax = clampPositiveInt(
-			options.serverAliveCountMax,
+			options.serverAliveCountMax ?? envNumber("SSH_EXEC_SERVER_ALIVE_COUNT_MAX"),
 			DEFAULT_SERVER_ALIVE_COUNT_MAX,
 		);
-		this.failureBackoffMs = Math.max(0, options.failureBackoffMs ?? 15_000);
+		this.failureBackoffMs = Math.max(0, options.failureBackoffMs ?? envNumber("SSH_EXEC_FAILURE_BACKOFF_MS") ?? 15_000);
 		this.#mountProbe = options.mountProbe ?? (async (mountPath) => await this.probeMount(mountPath));
 		this.#unmountMount = options.unmountMount ?? (async (mountPath) => await this.unmountPath(mountPath));
 	}
@@ -496,6 +499,17 @@ export class SessionManager {
 
 export function sanitizeHostForSocket(host: string): string {
 	return host.replace(/[^a-zA-Z0-9_.-]/g, "_");
+}
+function envString(name: string, fallback: string): string {
+	const value = process.env[name];
+	return value && value.trim() ? value.trim() : fallback;
+}
+
+function envNumber(name: string): number | undefined {
+	const value = process.env[name];
+	if (!value || !value.trim()) return undefined;
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function clampPositiveInt(value: number | undefined, fallback: number): number {

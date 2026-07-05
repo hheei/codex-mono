@@ -1,45 +1,35 @@
 # SSH Exec
 
-`@hheei/ssh-exec` is a single package that supports three usage modes:
+`@hheei/ssh-exec` gives coding agents three practical SSH tools: discover configured hosts, run remote commands, and mount remote files so normal file tools can edit them.
 
-- Codex plugin
-- pi extension
-- general MCP server
+It is meant for agents such as pi, Codex, or any MCP client that should work with machines you already access through OpenSSH aliases.
 
-It exposes three SSH-oriented tools:
+## What It Solves
 
-- `ssh_host`: search configured SSH aliases from local OpenSSH config
-- `ssh_mount`: mount a remote host locally through `sshfs`
-- `ssh_exec`: run non-interactive remote commands over SSH
+Most agents can run shell commands, but remote work is awkward without a clear tool interface. This package gives the agent explicit SSH tools instead of making it invent shell command formats.
 
-If you are not sure whether a remote alias exists, use `ssh_host` first.
+It also supports `sshfs` mounting. After a remote host is mounted, the agent can use its usual `read`, `write`, and `edit` tools on the returned local mount path, instead of trying to patch files through ad hoc `ssh` command strings.
 
-## Install in Codex
+In pi, the tools also render in a compact, readable form:
 
-This repo already includes a Codex plugin at `plugins/ssh-exec/`.
-
-### Method 1: install through Codex Marketplace
-
-Add this repo as a marketplace source, then install the plugin from that marketplace:
-
-```bash
-codex plugin marketplace add hheei/ssh-exec --ref main --sparse .agents/plugins
-codex plugin add ssh-exec@ssh-exec
+```text
+ssh_host "prod|staging"
+ssh_mount @prod
+ssh_exec @prod (timeout: 10s)
+$ systemctl status nginx
 ```
 
-Notes:
+Tool output follows pi's normal collapsed/expanded behavior, so long command output can stay compact and be expanded when needed.
 
-- marketplace source is defined in `.agents/plugins/marketplace.json`
-- plugin metadata lives at `plugins/ssh-exec/.codex-plugin/plugin.json`
+## Requirements
 
-### Method 2: install from a local checkout with Codex CLI
+- OpenSSH with usable host aliases in your local SSH config
+- `sshfs` for `ssh_mount`
+- pi, Codex, or another MCP client
 
-If you already cloned this repo locally, add the local marketplace path and install from it:
+Platform note: this has only been tested on macOS so far. Linux should work as long as OpenSSH and `sshfs` are installed and available on `PATH`.
 
-```bash
-codex plugin marketplace add /path/to/ssh-exec/.agents/plugins
-codex plugin add ssh-exec@ssh-exec
-```
+`ssh_exec` and `ssh_host` do not require `sshfs`; only `ssh_mount` does.
 
 ## Install in pi
 
@@ -49,25 +39,79 @@ Recommended:
 pi install npm:@hheei/ssh-exec
 ```
 
-You can also install it as a normal npm package:
-
-```bash
-npm install @hheei/ssh-exec
-```
-
-The pi extension entrypoint is `index.ts`.
-
-It registers these tools:
+This registers:
 
 - `ssh_host(ssh_host: string)`
 - `ssh_mount(host: string)`
 - `ssh_exec(host: string, command: string, timeout?: number)`
 
-Note:
+Use the `npm:` prefix when installing npm packages with pi.
 
-- `pi install` should use the `npm:` prefix for npm packages
+### pi Settings
 
-## Install in General MCP Clients
+Run `/ssh` in pi to open the SSH Exec settings UI. These settings apply only to the pi extension.
+
+The UI contains two kinds of settings:
+
+- connection defaults used by future `ssh_exec`, `ssh_mount`, and SSH master sessions
+- a host filter that can globally disable selected SSH aliases
+
+Available settings:
+
+| Setting | Default | Applies To | Meaning |
+| --- | ---: | --- | --- |
+| Default command timeout | `10s` | `ssh_exec` | Used when the tool call omits `timeout`. Per-call `timeout` still wins. |
+| ControlMaster alive | `3600s` | `ssh_exec`, `ssh_mount` | SSH `ControlPersist`; how long the reusable master connection stays alive. |
+| Alive interval | `300s` | `ssh`, `sshfs` | SSH `ServerAliveInterval`; keepalive ping interval. |
+| Alive retry count | `3` | `ssh`, `sshfs` | SSH `ServerAliveCountMax`; retry count before the connection is considered dead. |
+| `@host` rows | `enabled` | all SSH tools | Disable a host globally without editing `~/.ssh/config`. |
+
+Disabled hosts are hidden from `ssh_host` results. Direct `ssh_exec` and `ssh_mount` calls to disabled hosts return an error instead of connecting.
+
+The settings are stored globally at `~/.pi/agent/ssh-exec.json`:
+
+```json
+{
+  "commandTimeoutSeconds": 60,
+  "controlPersistSeconds": 7200,
+  "serverAliveIntervalSeconds": 300,
+  "serverAliveCountMax": 3,
+  "disabledHosts": ["prod", "staging"]
+}
+```
+
+Example behavior with that file:
+
+```text
+ssh_host(ssh_host: "*")
+// prod and staging are hidden
+
+ssh_exec(host: "prod", command: "uptime")
+// returns an error without opening an SSH connection
+
+ssh_exec(host: "dev", command: "uptime")
+// uses timeout 60s unless timeout is passed explicitly
+```
+
+## Install in Codex
+
+This repo includes a Codex plugin at `plugins/ssh-exec/`.
+
+Install through a Codex marketplace source:
+
+```bash
+codex plugin marketplace add hheei/ssh-exec --ref main --sparse .agents/plugins
+codex plugin add ssh-exec@ssh-exec
+```
+
+Or from a local checkout:
+
+```bash
+codex plugin marketplace add /path/to/ssh-exec/.agents/plugins
+codex plugin add ssh-exec@ssh-exec
+```
+
+## Use with MCP Clients
 
 If your MCP client can launch npm packages directly, use `npx`:
 
@@ -95,44 +139,133 @@ If you prefer Bun, use `bunx`:
 }
 ```
 
-If you want to run from a local checkout, use the root MCP entrypoint `ssh-exec-mcp.ts`.
+Reference config: `examples/pi-agent.mcp.json`.
 
-Reference config:
+### MCP and Codex Environment Variables
 
-- `examples/pi-agent.mcp.json`
+The pi `/ssh` settings UI is only for the pi extension. Codex and general MCP clients run through the MCP server and do not read `~/.pi/agent/ssh-exec.json`. Configure those clients with environment variables instead.
 
-## `ssh_host` Tool
+| Environment Variable | Default | Applies To | Meaning |
+| --- | ---: | --- | --- |
+| `SSH_EXEC_COMMAND_TIMEOUT_SECONDS` | `10` | `ssh_exec` | Default command timeout when a call omits `timeout`. |
+| `SSH_EXEC_CONTROL_PERSIST_SECONDS` | `3600` | `ssh_exec`, `ssh_mount` | SSH `ControlPersist` lifetime for master connections. |
+| `SSH_EXEC_CONNECT_TIMEOUT_SECONDS` | `30` | SSH connection setup | SSH `ConnectTimeout`. |
+| `SSH_EXEC_CONNECTION_ATTEMPTS` | `2` | SSH connection setup | SSH `ConnectionAttempts`. |
+| `SSH_EXEC_SERVER_ALIVE_INTERVAL_SECONDS` | `300` | `ssh`, `sshfs` | SSH `ServerAliveInterval`. |
+| `SSH_EXEC_SERVER_ALIVE_COUNT_MAX` | `3` | `ssh`, `sshfs` | SSH `ServerAliveCountMax`. |
+| `SSH_EXEC_DISABLED_HOSTS` | `[]` | all SSH tools | JSON list string of aliases hidden from `ssh_host` and blocked for `ssh_exec` / `ssh_mount`, for example `["prod","staging"]`. |
 
-`ssh_host` is the discovery tool to use when you are not sure whether a remote host exists.
+Example `npx` launch:
+
+```bash
+SSH_EXEC_COMMAND_TIMEOUT_SECONDS=60 \
+SSH_EXEC_CONTROL_PERSIST_SECONDS=7200 \
+SSH_EXEC_SERVER_ALIVE_INTERVAL_SECONDS=120 \
+SSH_EXEC_SERVER_ALIVE_COUNT_MAX=5 \
+SSH_EXEC_DISABLED_HOSTS='["prod","staging"]' \
+npx -y @hheei/ssh-exec
+```
+
+Example MCP config with environment variables:
+
+```json
+{
+  "mcpServers": {
+    "ssh": {
+      "command": "npx",
+      "args": ["-y", "@hheei/ssh-exec"],
+      "env": {
+        "SSH_EXEC_COMMAND_TIMEOUT_SECONDS": "60",
+        "SSH_EXEC_CONTROL_PERSIST_SECONDS": "7200",
+        "SSH_EXEC_DISABLED_HOSTS": "[\"prod\",\"staging\"]"
+      }
+    }
+  }
+}
+```
+
+With `SSH_EXEC_DISABLED_HOSTS='["prod","staging"]'`:
+
+```text
+ssh_host(ssh_host: "*")
+// prod and staging are hidden
+
+ssh_mount(host: "prod")
+// returns an error without mounting
+
+ssh_exec(host: "prod", command: "uptime")
+// returns an error without connecting
+```
+
+## Tools
+
+### `ssh_host`
+
+Search local OpenSSH config aliases. Use this first when you are not sure which alias exists.
 
 Examples:
 
-- `ssh_host(ssh_host: "*")`: list all configured hosts
-- `ssh_host(ssh_host: "ileqm")`: return the exact or matching host if it exists
-- `ssh_host(ssh_host: "ileqm|sccpu")`: regex search for multiple hosts
+- `ssh_host(ssh_host: "*")`: list configured hosts
+- `ssh_host(ssh_host: "prod")`: find matching aliases
+- `ssh_host(ssh_host: "prod|staging")`: regex-style search for multiple aliases
 
-Return examples:
+Example output:
 
-- `ileqm (user@hostname)`
-- `No \`ileqm\` host.`
+```text
+prod (deploy@example.com)
+staging (deploy@staging.example.com)
+```
 
-## Recommended Workflow
+### `ssh_exec`
 
-1. Call `ssh_host` with `ssh_host: "*"` or a regex such as `ileqm|sccpu`.
-2. Pick the alias you want from results like `alias (user@hostname)`.
-3. Call `ssh_mount` before editing remote files.
-4. Call `ssh_exec` to inspect state, verify changes, or reload services.
+Run a non-interactive command on a remote OpenSSH host alias.
+
+Example:
+
+```text
+ssh_exec(host: "prod", command: "systemctl reload nginx", timeout: 10)
+```
+
+Use it for inspection, verification, service reloads, log checks, and other commands where text output is enough.
+
+### `ssh_mount`
+
+Mount a remote host locally through `sshfs`. The returned path is a local mount point. After mounting, the agent can operate under that path with normal file tools.
 
 Example flow:
 
-- `ssh_host(ssh_host: "prod|staging")`
-- `ssh_mount(host: "prod")`
-- edit files under the returned local path
-- `ssh_exec(host: "prod", command: "systemctl reload nginx")`
+```text
+ssh_mount(host: "prod")
+read(path: "/local/mount/path/etc/nginx/nginx.conf")
+edit(path: "/local/mount/path/etc/nginx/nginx.conf", ...)
+ssh_exec(host: "prod", command: "nginx -t && systemctl reload nginx")
+```
+
+`ssh_mount` mounts the remote root `/`, so the returned local path represents the remote filesystem root.
+
+## Recommended Workflow
+
+1. Use `ssh_host` to find or confirm the SSH alias.
+2. Use `ssh_mount` before reading or editing remote files.
+3. Use normal file tools on the returned local mount path.
+4. Use `ssh_exec` to verify state, run tests, reload services, or inspect logs.
+
+Example:
+
+```text
+ssh_host(ssh_host: "prod|staging")
+ssh_mount(host: "prod")
+read(path: "/returned/mount/path/home/app/config.yml")
+edit(path: "/returned/mount/path/home/app/config.yml", ...)
+ssh_exec(host: "prod", command: "systemctl reload app")
+```
 
 ## Behavior Notes
 
-- `ssh_host` reads local OpenSSH config; it does not verify reachability
-- `ssh_mount` mounts the remote root `/`
-- `ssh_exec` returns bounded output and exit metadata
-- SSH keepalive defaults are `ServerAliveInterval=300` and `ServerAliveCountMax=3`
+- `ssh_host` reads your local OpenSSH config; it does not verify network reachability.
+- `ssh_host` applies disabled-host filters from `/ssh` in pi or `SSH_EXEC_DISABLED_HOSTS` in MCP/Codex.
+- `ssh_exec` returns bounded output and exit metadata.
+- `ssh_mount` depends on `sshfs` and your local mount permissions.
+- Default SSH keepalive settings are `ServerAliveInterval=300` and `ServerAliveCountMax=3`.
+- The pi `/ssh` settings file is pi-only; Codex and general MCP clients use environment variables.
+- The tools use your existing SSH config and authentication setup. If regular `ssh <alias>` does not work locally, these tools will not fix that.

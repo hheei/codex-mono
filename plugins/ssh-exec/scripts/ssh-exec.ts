@@ -114,8 +114,15 @@ export function validateHost(host: string): string {
 }
 
 export function clampTimeoutSeconds(value: number | undefined): number {
-	const raw = value ?? 10;
+	const raw = value ?? envTimeoutSeconds();
 	return Math.min(3600, Math.max(1, raw));
+}
+
+function envTimeoutSeconds(): number {
+	const value = process.env.SSH_EXEC_COMMAND_TIMEOUT_SECONDS ?? process.env.SSH_EXEC_TIMEOUT_SECONDS;
+	if (!value || !value.trim()) return 10;
+	const parsed = Number(value);
+	return Number.isFinite(parsed) ? parsed : 10;
 }
 
 function remainingTimeoutMs(deadlineMs: number, timeoutMs: number): number {
