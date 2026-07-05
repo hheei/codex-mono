@@ -1,6 +1,6 @@
 {
   "name": "@hheei/ssh-exec",
-  "version": "0.3.2",
+  "version": "0.4.1",
   "description": "SSH host discovery, remote exec, sshfs mount, MCP server, and pi-extension for Codex and pi",
   "type": "module",
   "license": "MIT",
@@ -40,6 +40,7 @@
   ],
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
     "typebox": "*"
   },
   "pi": {

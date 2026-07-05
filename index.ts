@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 import { createMcpServer } from "./plugins/ssh-exec/scripts/ssh-exec-mcp";
@@ -17,6 +18,12 @@ export default function register(pi: ExtensionAPI) {
 		parameters: Type.Object({
 			ssh_host: Type.String(),
 		}),
+		renderCall(args, theme) {
+			let text = theme.fg("toolTitle", theme.bold("ssh_host "));
+			text += theme.fg("accent", `"${args.ssh_host}"`);
+			return new Text(text, 0, 0);
+		},
+		renderResult: renderCollapsedResult,
 		async execute(_id, params) {
 			const response = await server.handle({
 				jsonrpc: "2.0",
@@ -37,6 +44,12 @@ export default function register(pi: ExtensionAPI) {
 		parameters: Type.Object({
 			host: Type.String(),
 		}),
+		renderCall(args, theme) {
+			let text = theme.fg("toolTitle", theme.bold("ssh_mount "));
+			text += theme.fg("accent", `@${args.host}`);
+			return new Text(text, 0, 0);
+		},
+		renderResult: renderCollapsedResult,
 		async execute(_id, params) {
 			const response = await server.handle({
 				jsonrpc: "2.0",
@@ -59,6 +72,15 @@ export default function register(pi: ExtensionAPI) {
 			command: Type.String(),
 			timeout: Type.Optional(Type.Number()),
 		}),
+		renderCall(args, theme) {
+			let text = theme.fg("toolTitle", theme.bold("ssh_exec "));
+			text += theme.fg("accent", `@${args.host}`);
+			if (args.timeout) text += theme.fg("dim", ` (timeout: ${args.timeout}s)`);
+
+			text += `\n${theme.fg("bashMode", `$ ${args.command}`)}`;
+			return new Text(text, 0, 0);
+		},
+		renderResult: renderCollapsedResult,
 		async execute(_id, params) {
 			const response = await server.handle({
 				jsonrpc: "2.0",
@@ -69,6 +91,34 @@ export default function register(pi: ExtensionAPI) {
 			return normalizePiToolResult(response);
 		},
 	});
+}
+
+function renderCollapsedResult(result, { expanded }, theme) {
+	const text = result.content
+		.filter((item) => item.type === "text" && typeof item.text === "string")
+		.map((item) => item.text)
+		.join("\n")
+		.trimEnd();
+	if (!text) return new Text("", 0, 0);
+
+	const durationMs = result.details?.durationMs;
+	const durationText = typeof durationMs === "number" ? theme.fg("muted", `Took ${(durationMs / 1000).toFixed(1)}s`) : "";
+	if (expanded) {
+		const output = theme.fg("toolOutput", text);
+		return new Text(durationText ? `${output}\n\n${durationText}` : output, 0, 0);
+	}
+
+	const lines = text.split("\n");
+	const previewLines = 5;
+	const skipped = Math.max(0, lines.length - previewLines);
+	const preview = lines.slice(-previewLines).join("\n");
+	let output = theme.fg("toolOutput", preview);
+	if (skipped > 0) {
+		output = `${theme.fg("dim", `... (${skipped} earlier lines, ctrl+o to expand)`)}\n${output}`;
+	}
+
+	if (durationText) output += `\n\n${durationText}`;
+	return new Text(output, 0, 0);
 }
 
 function normalizePiToolResult(response: unknown) {

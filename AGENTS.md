@@ -42,7 +42,7 @@ Repository policy:
 
 Package and release policy:
 - npm package name: `@hheei/ssh-exec`
-- Current release line: `0.3.x`
+- Current release line: `0.4.x`
 - Before publishing, sync version fields in:
 - `package.json`
 - `plugins/ssh-exec/.codex-plugin/plugin.json`
