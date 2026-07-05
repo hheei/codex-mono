@@ -1,5 +1,5 @@
 {
-  "name": "@hheei/ssh-exec",
+  "name": "@hheei/ssh-exec-mcp",
   "version": "0.2.0",
   "description": "Codex SSH plugin with host discovery, remote exec, and sshfs mount helpers",
   "license": "MIT",
