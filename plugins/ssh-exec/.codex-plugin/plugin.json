@@ -1,1 +1,35 @@
-{"name":"ssh-exec","version":"0.5.0","description":"Remote command execution sshfs mounting over OpenSSH","author":{"name":"hheei","url":"https://github.com/hheei"},"homepage":"https://github.com/hheei/ssh-exec","repository":"https://github.com/hheei/ssh-exec","license":"MIT","keywords":["ssh","mcp","codex","openssh","sshfs"],"interface":{"displayName":"SSH Exec","shortDescription":"Find SSH hosts, run remote commands, mount remote files over OpenSSH.","longDescription":"SSH Exec provides three tools: host discovering configured remote hosts, mount mounting remote host locally so Codex can use built-in file tools, and exec remote commands such inspection, verification, service control.","developerName":"hheei","category":"Productivity","capabilities":["MCP","SSH"],"websiteURL":"https://github.com/hheei/ssh-exec","defaultPrompt":"If you are not sure whether remote host alias exists, use host first. Use mount before editing remote files, then use exec to inspect or verify remote host.","brandColor":"#111827","composerIcon":"./assets/icon.svg"},"mcpServers":"./.mcp.json"}
+{
+  "name": "ssh-exec",
+  "version": "0.5.0+codex.20260706180744",
+  "description": "Remote command execution sshfs mounting over OpenSSH",
+  "author": {
+    "name": "hheei",
+    "url": "https://github.com/hheei"
+  },
+  "homepage": "https://github.com/hheei/ssh-exec",
+  "repository": "https://github.com/hheei/ssh-exec",
+  "license": "MIT",
+  "keywords": [
+    "ssh",
+    "mcp",
+    "codex",
+    "openssh",
+    "sshfs"
+  ],
+  "interface": {
+    "displayName": "SSH Exec",
+    "shortDescription": "Find SSH hosts, run remote commands, mount remote files over OpenSSH.",
+    "longDescription": "SSH Exec provides three tools: host discovering configured remote hosts, mount mounting remote host locally so Codex can use built-in file tools, and exec remote commands such inspection, verification, service control.",
+    "developerName": "hheei",
+    "category": "Productivity",
+    "capabilities": [
+      "MCP",
+      "SSH"
+    ],
+    "websiteURL": "https://github.com/hheei/ssh-exec",
+    "defaultPrompt": "If you are not sure whether remote host alias exists, use host first. Use mount before editing remote files, then use exec to inspect or verify remote host.",
+    "brandColor": "#111827",
+    "composerIcon": "./assets/icon.svg"
+  },
+  "mcpServers": "./.mcp.json"
+}

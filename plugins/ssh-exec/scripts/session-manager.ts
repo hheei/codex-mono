@@ -82,6 +82,7 @@ const DEFAULT_MASTER_SETUP_TIMEOUT_MS = 30_000;
 const DEFAULT_SERVER_ALIVE_INTERVAL_SECONDS = 300;
 const DEFAULT_SERVER_ALIVE_COUNT_MAX = 3;
 const CONTROL_CHECK_TIMEOUT_MS = 10_000;
+const MOUNT_HEALTH_TIMEOUT_MS = 2_000;
 
 export class SessionManager {
 	readonly sshBin: string;
@@ -408,7 +409,20 @@ export class SessionManager {
 		if (result.exitCode !== 0) return { mounted: false, healthy: false };
 		const output = result.stdout || result.output || "";
 		const mounted = output.split("\n").some((line) => line.includes(` on ${mountPath} `));
-		return { mounted, healthy: mounted };
+		if (!mounted) return { mounted: false, healthy: false };
+		return { mounted: true, healthy: await this.probeMountHealth(mountPath) };
+	}
+
+	private async probeMountHealth(mountPath: string): Promise<boolean> {
+		try {
+			await Promise.race([
+				readdir(mountPath),
+				new Promise((_, reject) => setTimeout(() => reject(new Error("mount probe timed out")), MOUNT_HEALTH_TIMEOUT_MS)),
+			]);
+			return true;
+		} catch {
+			return false;
+		}
 	}
 
 	private async unmountPath(mountPath: string): Promise<boolean> {
