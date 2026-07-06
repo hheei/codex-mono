@@ -17,7 +17,7 @@ SSH Exec is a Codex plugin that exposes three MCP tools:
 Install through the GitHub marketplace:
 
 ```bash
-codex plugin marketplace add hheei/codex-plugins --ref main --sparse .agents/plugins
+codex plugin marketplace add hheei/codex-plugins --ref main
 codex plugin add ssh-exec@codex-plugins
 ```
 
