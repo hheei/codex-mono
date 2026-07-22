@@ -1,102 +1,222 @@
-import { afterEach, beforeEach, expect, test } from "bun:test";
-import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { SshfsManager } from "./sshfs-manager";
+import {
+	SshfsManager,
+	type ProcessResult,
+	type ProcessRunner,
+	validateSshfsHost,
+} from "./sshfs-manager";
 
-let tmpRoot: string;
+interface MountedState {
+	source: string;
+	path: string;
+	type: string;
+	healthy: boolean;
+}
 
-beforeEach(async () => {
-	tmpRoot = await mkdtemp(join(tmpdir(), "sshfs-test-"));
-});
+const temporaryPaths: string[] = [];
 
 afterEach(async () => {
-	await rm(tmpRoot, { recursive: true, force: true });
+	await Promise.all(temporaryPaths.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 
-test("reuses a healthy mount without starting sshfs", async () => {
-	const manager = new SshfsManager({
-		mountDir: join(tmpRoot, "mounts"),
-		sshfsBin: join(tmpRoot, "missing-sshfs"),
-		mountProbe: async () => ({ mounted: true, healthy: true }),
+async function temporaryMountRoot(): Promise<string> {
+	const path = await mkdtemp(join(tmpdir(), "sshfs-test-"));
+	temporaryPaths.push(path);
+	return path;
+}
+
+function harness() {
+	const calls: Array<{ command: string; args: string[] }> = [];
+	let mounted: MountedState | undefined;
+	let filesystemSource: string | undefined;
+	let visibilityDelay = 0;
+	let sshfsResult: ProcessResult = { exitCode: 0, stdout: "", stderr: "" };
+	let unmountFails = false;
+
+	const runner: ProcessRunner = async (command, args) => {
+		calls.push({ command, args });
+		if (command === "mount") {
+			const visible = mounted && visibilityDelay === 0;
+			if (mounted && visibilityDelay > 0) visibilityDelay -= 1;
+			return ok(visible ? `${mounted.source} on ${mounted.path} type ${mounted.type} (rw)\n` : "");
+		}
+		if (command === "df") {
+			const source = filesystemSource ?? mounted?.source ?? "/dev/local";
+			return ok(`Filesystem 512-blocks Used Available Capacity Mounted on\n${source} 1 1 1 1% ${args.at(-1)}\n`);
+		}
+		if (command === "ls") return mounted?.healthy === false ? fail("stale") : ok();
+		if (command === "ssh") return ok("/home/test");
+		if (command === "sshfs") {
+			const source = args.at(-2)!;
+			const path = args.at(-1)!;
+			mounted = { source, path, type: "fuse.sshfs", healthy: true };
+			filesystemSource = undefined;
+			return sshfsResult;
+		}
+		if (command === "fusermount" || command === "umount" || command === "diskutil") {
+			if (!unmountFails) mounted = undefined;
+			return unmountFails ? fail("busy") : ok();
+		}
+		return fail("unsupported");
+	};
+
+	return {
+		calls,
+		runner,
+		mounted: () => mounted,
+		setMounted: (value: MountedState | undefined) => { mounted = value; },
+		setFilesystemSource: (value: string | undefined) => { filesystemSource = value; },
+		setVisibilityDelay: (value: number) => { visibilityDelay = value; },
+		setSshfsResult: (value: ProcessResult) => { sshfsResult = value; },
+		setUnmountFails: (value: boolean) => { unmountFails = value; },
+	};
+}
+
+function ok(stdout = ""): ProcessResult {
+	return { exitCode: 0, stdout, stderr: "" };
+}
+
+function fail(stderr: string): ProcessResult {
+	return { exitCode: 1, stdout: "", stderr };
+}
+
+describe("sshfs manager", () => {
+	test("mounts a remote root and reuses the healthy shared mount", async () => {
+		const mountRoot = await temporaryMountRoot();
+		const host = harness();
+		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: host.runner });
+
+		const first = await manager.ensureMounted("prod");
+		const second = await manager.ensureMounted("prod");
+
+		expect(first).toEqual({
+			host: "prod",
+			localPath: join(mountRoot, "prod"),
+			remoteHomeLocalPath: join(mountRoot, "prod", "home", "test"),
+			status: "mounted",
+		});
+		expect(second.status).toBe("reused");
+		expect(host.calls.filter((call) => call.command === "sshfs")).toHaveLength(1);
+		expect(host.calls.find((call) => call.command === "ssh")?.args).toContain("ConnectTimeout=30");
 	});
 
-	expect(await manager.ensureMounted("prod")).toBe(join(tmpRoot, "mounts", "prod"));
-});
+	test("refuses a mountpoint occupied by another filesystem", async () => {
+		const mountRoot = await temporaryMountRoot();
+		const host = harness();
+		const localPath = join(mountRoot, "prod");
+		host.setMounted({ source: "/dev/disk1", path: localPath, type: "ext4", healthy: true });
+		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: host.runner });
 
-test("retries sshfs once", async () => {
-	const fakeSshfs = join(tmpRoot, "fake-sshfs.ts");
-	const countPath = join(tmpRoot, "count");
-	const argsPath = join(tmpRoot, "args");
-	await writeFile(fakeSshfs, `#!/usr/bin/env bun
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-const args = process.argv.slice(2);
-const countPath = ${JSON.stringify(countPath)};
-const argsPath = ${JSON.stringify(argsPath)};
-const count = Number(await readFile(countPath, "utf8").catch(() => "0")) + 1;
-await writeFile(countPath, String(count));
-await appendFile(argsPath, JSON.stringify(args) + "\\n");
-if (count === 1) process.exit(1);
-const mountPath = args.at(-1);
-await mkdir(mountPath, { recursive: true });
-await writeFile(mountPath + "/.mounted", "yes");
-`);
-	await chmod(fakeSshfs, 0o755);
-	const deadline = Date.now() + 5_000;
-	const manager = new SshfsManager({
-		mountDir: join(tmpRoot, "mounts"),
-		sshfsBin: fakeSshfs,
-		deadline: () => deadline,
-		mountProbe: async (mountPath) => ({
-			mounted: await stat(join(mountPath, ".mounted")).then(() => true).catch(() => false),
-			healthy: await stat(join(mountPath, ".mounted")).then(() => true).catch(() => false),
-		}),
-		unmount: async () => true,
+		await expect(manager.ensureMounted("prod")).rejects.toThrow("occupied by another filesystem");
+		expect(host.calls.some((call) => call.command === "sshfs")).toBe(false);
+		expect(host.calls.some((call) => call.command === "fusermount")).toBe(false);
 	});
 
-	await manager.ensureMounted("prod");
-	expect(await readFile(countPath, "utf8")).toBe("2");
-	const args = await readFile(argsPath, "utf8");
-	expect(args).toContain("StrictHostKeyChecking=yes");
-	expect(args).toContain("follow_symlinks");
-	expect(args).not.toMatch(/Control(Master|Path)/);
-});
+	test("replaces a matching unhealthy mount", async () => {
+		const mountRoot = await temporaryMountRoot();
+		const host = harness();
+		const localPath = join(mountRoot, "prod");
+		host.setMounted({ source: "prod:/", path: localPath, type: "fuse.sshfs", healthy: false });
+		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: host.runner });
 
-test("rejects when an unhealthy mount cannot be unmounted", async () => {
-	const manager = new SshfsManager({
-		mountDir: join(tmpRoot, "mounts"),
-		mountProbe: async () => ({ mounted: true, healthy: false }),
-		unmount: async () => false,
+		expect((await manager.ensureMounted("prod")).status).toBe("mounted");
+		expect(host.calls.some((call) => call.command === "fusermount")).toBe(true);
+		expect(host.calls.filter((call) => call.command === "sshfs")).toHaveLength(1);
 	});
 
-	await expect(manager.ensureMounted("prod")).rejects.toThrow(/cannot unmount/i);
-});
+	test("ignores a stale mount-table entry whose live source differs", async () => {
+		const mountRoot = await temporaryMountRoot();
+		const host = harness();
+		const localPath = join(mountRoot, "prod");
+		host.setMounted({ source: "prod:/", path: localPath, type: "fuse.sshfs", healthy: true });
+		host.setFilesystemSource("/dev/local");
+		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: host.runner });
 
-test("reports final cleanup failure after both mount attempts", async () => {
-	const fakeSshfs = join(tmpRoot, "fake-sshfs.ts");
-	await writeFile(fakeSshfs, "#!/usr/bin/env bun\n");
-	await chmod(fakeSshfs, 0o755);
-	let probes = 0;
-	let unmounts = 0;
-	const manager = new SshfsManager({
-		mountDir: join(tmpRoot, "mounts"),
-		sshfsBin: fakeSshfs,
-		mountProbe: async () => (++probes === 1
-			? { mounted: false, healthy: false }
-			: { mounted: true, healthy: false }),
-		unmount: async () => ++unmounts === 1,
+		expect((await manager.ensureMounted("prod")).status).toBe("mounted");
+		expect(host.calls.filter((call) => call.command === "sshfs")).toHaveLength(1);
 	});
 
-	await expect(manager.ensureMounted("prod")).rejects.toThrow(/cannot clear failed/i);
-});
+	test("waits for a daemonized mount to become visible", async () => {
+		const mountRoot = await temporaryMountRoot();
+		const host = harness();
+		host.setVisibilityDelay(2);
+		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: host.runner });
 
-test("rejects once the shared deadline is exhausted", async () => {
-	const manager = new SshfsManager({
-		mountDir: join(tmpRoot, "mounts"),
-		deadline: () => Date.now() - 1,
-		mountProbe: async () => ({ mounted: false, healthy: false }),
+		await manager.ensureMounted("prod");
+		expect(host.calls.filter((call) => call.command === "mount").length).toBeGreaterThan(2);
 	});
 
-	await expect(manager.ensureMounted("prod")).rejects.toThrow(/timeout budget/i);
+	test("rolls back a mount that times out", async () => {
+		const mountRoot = await temporaryMountRoot();
+		const host = harness();
+		host.setSshfsResult({ exitCode: null, stdout: "", stderr: "", timedOut: true });
+		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: host.runner });
+
+		await expect(manager.ensureMounted("prod")).rejects.toThrow("timed out");
+		expect(host.mounted()).toBeUndefined();
+	});
+
+	test("reports a missing sshfs binary", async () => {
+		const mountRoot = await temporaryMountRoot();
+		const host = harness();
+		host.setSshfsResult({ exitCode: 127, stdout: "", stderr: "" });
+		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: host.runner });
+
+		await expect(manager.ensureMounted("prod")).rejects.toThrow("binary not found");
+	});
+
+	test("uses a traversal-safe path and the macOS local option", async () => {
+		const mountRoot = await temporaryMountRoot();
+		const host = harness();
+		const manager = new SshfsManager({ mountRoot, platform: "darwin", runner: host.runner });
+
+		const result = await manager.ensureMounted("user@host");
+		expect(result.localPath).toBe(join(mountRoot, "user%40host"));
+		const args = host.calls.find((call) => call.command === "sshfs")?.args;
+		expect(args).toContain("local");
+		expect(args).toContain("ConnectTimeout=30");
+	});
+
+	test("rejects symlink mountpoints and unsafe hosts", async () => {
+		const root = await temporaryMountRoot();
+		const mountRoot = join(root, "mounts");
+		const target = join(root, "target");
+		await mkdir(mountRoot);
+		await mkdir(target);
+		await symlink(target, join(mountRoot, "prod"));
+		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: harness().runner });
+
+		await expect(manager.ensureMounted("prod")).rejects.toThrow("real directory");
+		expect(() => validateSshfsHost("-oProxyCommand=sh")).toThrow("must not start");
+		expect(() => validateSshfsHost("host name")).toThrow("whitespace");
+		expect(() => validateSshfsHost("host:/tmp")).toThrow("path or port");
+		expect(() => validateSshfsHost("host:2200")).toThrow("path or port");
+	});
+
+	test("rejects non-empty mountpoints and unsupported platforms", async () => {
+		const mountRoot = await temporaryMountRoot();
+		await mkdir(join(mountRoot, "prod"));
+		await writeFile(join(mountRoot, "prod", "data"), "occupied");
+		const host = harness();
+		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: host.runner });
+
+		await expect(manager.ensureMounted("prod")).rejects.toThrow("not empty");
+		await expect(new SshfsManager({ mountRoot, platform: "win32", runner: host.runner }).ensureMounted("prod"))
+			.rejects.toThrow("Linux and macOS");
+	});
+
+	test("does not report a failed unmount as success", async () => {
+		const mountRoot = await temporaryMountRoot();
+		const host = harness();
+		const localPath = join(mountRoot, "prod");
+		host.setMounted({ source: "prod:/", path: localPath, type: "fuse.sshfs", healthy: false });
+		host.setUnmountFails(true);
+		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: host.runner });
+
+		await expect(manager.ensureMounted("prod")).rejects.toThrow("Unable to unmount unhealthy");
+	});
 });

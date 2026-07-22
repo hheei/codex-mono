@@ -1,7 +1,7 @@
 {
   "name": "sshfs",
-  "version": "0.5.0+codex.20260720094856",
-  "description": "Use configured OpenSSH hosts through the built-in file tools.",
+  "version": "0.6.0",
+  "description": "Explicitly mount configured OpenSSH hosts for use with local file tools.",
   "author": {
     "name": "hheei",
     "url": "https://github.com/hheei"
@@ -17,20 +17,18 @@
   ],
   "interface": {
     "displayName": "SSHFS",
-    "shortDescription": "Access configured OpenSSH hosts with built-in file tools.",
-    "longDescription": "Use paths such as ssh/judy:/etc/hosts or ssh/ileqm:project/file with unified exec and apply_patch. Remote hosts are mounted on demand through sshfs.",
+    "shortDescription": "Explicitly mount SSH remote files before accessing them.",
+    "longDescription": "For every SSH remote file read, write, edit, search, listing, or inspection request, call sshfs first. It mounts only the remote root and returns local root and remote-home paths for built-in file tools.",
     "developerName": "hheei",
     "category": "Productivity",
     "capabilities": [
-      "SSH",
-      "PreToolUse hook"
+      "MCP",
+      "SSH"
     ],
     "websiteURL": "https://github.com/hheei/codex-mono",
-    "defaultPrompt": [
-      "Read or edit a file on one of my configured SSH hosts."
-    ],
+    "defaultPrompt": "For every SSH remote file read, write, edit, search, listing, or inspection request, you must call sshfs first and then use local file tools under its returned paths. Do not use direct SSH commands for remote file operations. Keep grep and find scoped to narrow paths; never recursively scan a mounted root.",
     "brandColor": "#111827",
     "composerIcon": "./assets/icon.svg"
   },
-  "hooks": "./hooks/claude-codex-hooks.json"
+  "mcpServers": "./.mcp.json"
 }

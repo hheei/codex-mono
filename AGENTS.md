@@ -21,4 +21,6 @@ Repository policy:
 
 SSHFS policy:
 - Plugin path: `plugins/sshfs`.
-- This plugin exposes only its `PreToolUse` hook; it has no MCP tools.
+- This plugin exposes only one MCP tool, `sshfs`; it has no hooks.
+- Mounts are shared under `~/.cache/sshfs-addon/<host>/` and require an explicit tool call.
+- Every SSH remote file read, write, edit, search, listing, or inspection must use `sshfs` first; direct SSH commands are only for remote process or service operations.

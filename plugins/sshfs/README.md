@@ -1,16 +1,23 @@
-# SSH
+# SSHFS
 
-This plugin adds a `PreToolUse` hook for unified exec (`Bash`) and `apply_patch`. It maps `ssh/<host>:...` paths to an on-demand `sshfs` mount, using aliases from `~/.ssh/config`.
+This plugin exposes one MCP tool: `sshfs`.
 
-## Paths
+Call it explicitly with an OpenSSH host alias. It only mounts the remote root (`<host>:/`) under `~/.cache/sshfs-addon/` and returns both the local root path and the local path corresponding to the remote user's home directory.
 
-```text
-ssh/judy:/etc/hosts       # remote root: /etc/hosts
-ssh/ileqm:~/project/a     # remote home: ~/project/a
-ssh/ileqm:project/a       # remote home: ~/project/a
-```
+For every SSH remote file read, write, edit, search, listing, or inspection request, the model must call `sshfs` first and then use built-in local file tools under one of the returned paths. Direct SSH commands are not used for remote file operations.
 
-The root of each mount is `~/.codex/plugins/ssh/<host>/`. The hook reuses healthy mounts, follows symlinks on the remote server, and requires an existing trusted host key, `sshfs`, and Bun. A `SessionStart` hook teaches Codex the virtual path syntax without exposing the local mount path.
+Healthy mounts are reused across compatible clients, including Pi Basics. The MCP server leaves healthy mounts in place when it exits. A conflicting filesystem is never unmounted or replaced.
+
+Local `grep` and `find` work through SSHFS, but network metadata round trips make broad recursive scans expensive. Always target a narrow file or directory and never recursively scan the mounted root.
+
+Remote connections and mount operations allow up to 30 seconds for high-latency clusters. Failed mounts receive at most 5 additional seconds for rollback, bounding a call to about 35 seconds.
+
+## Requirements
+
+- Linux or macOS
+- Bun
+- `sshfs`
+- Non-interactive OpenSSH authentication
 
 ## Install
 

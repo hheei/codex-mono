@@ -4,7 +4,7 @@ This repository contains Codex plugins.
 
 ## Plugins
 
-- `sshfs`: map `ssh/<host>:...` paths in built-in file tools to OpenSSH hosts.
+- `sshfs`: required before SSH remote file operations; mounts only the remote root and returns local root and remote-home paths.
 
 ## Install
 
