@@ -6,8 +6,8 @@
     "name": "hheei",
     "url": "https://github.com/hheei"
   },
-  "homepage": "https://github.com/hheei/ssh-exec",
-  "repository": "https://github.com/hheei/ssh-exec",
+  "homepage": "https://github.com/hheei/codex-mono",
+  "repository": "https://github.com/hheei/codex-mono",
   "license": "MIT",
   "keywords": [
     "ssh",
@@ -25,7 +25,7 @@
       "SSH",
       "PreToolUse hook"
     ],
-    "websiteURL": "https://github.com/hheei/ssh-exec",
+    "websiteURL": "https://github.com/hheei/codex-mono",
     "defaultPrompt": [
       "Read or edit a file on one of my configured SSH hosts."
     ],

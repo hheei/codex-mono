@@ -15,6 +15,6 @@ The root of each mount is `~/.codex/plugins/ssh/<host>/`. The hook reuses health
 ## Install
 
 ```bash
-codex plugin marketplace add hheei/codex-plugins --ref main
-codex plugin add sshfs@codex-plugins
+codex plugin marketplace add hheei/codex-mono --ref main
+codex plugin add sshfs@codex-mono
 ```

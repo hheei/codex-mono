@@ -1,5 +1,5 @@
 {
-  "name": "codex-plugins",
+  "name": "codex-mono",
   "interface": {
     "displayName": "Codex Plugins"
   },
@@ -8,7 +8,7 @@
       "name": "sshfs",
       "source": {
         "source": "local",
-        "path": "./plugins/ssh-exec"
+        "path": "./plugins/sshfs"
       },
       "policy": {
         "installation": "AVAILABLE",

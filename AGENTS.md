@@ -20,5 +20,5 @@ Repository policy:
 - When changing exported tool names or public behavior, update tests and README in the same change.
 
 SSHFS policy:
-- Plugin path: `plugins/ssh-exec`.
+- Plugin path: `plugins/sshfs`.
 - This plugin exposes only its `PreToolUse` hook; it has no MCP tools.

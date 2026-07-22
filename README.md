@@ -11,6 +11,6 @@ This repository contains Codex plugins.
 Install the marketplace from GitHub:
 
 ```bash
-codex plugin marketplace add hheei/codex-plugins --ref main
-codex plugin add sshfs@codex-plugins
+codex plugin marketplace add hheei/codex-mono --ref main
+codex plugin add sshfs@codex-mono
 ```

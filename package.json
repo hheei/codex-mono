@@ -1,17 +1,17 @@
 {
-  "name": "codex-plugins",
+  "name": "codex-mono",
   "version": "0.5.0",
   "private": true,
   "description": "Local Codex plugin monorepo",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://github.com/hheei/codex-plugins",
+  "homepage": "https://github.com/hheei/codex-mono",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hheei/codex-plugins.git"
+    "url": "git+https://github.com/hheei/codex-mono.git"
   },
   "bugs": {
-    "url": "https://github.com/hheei/codex-plugins/issues"
+    "url": "https://github.com/hheei/codex-mono/issues"
   },
   "author": "hheei",
   "files": [
