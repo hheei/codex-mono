@@ -80,12 +80,8 @@ The plugin-side workflows are mostly postprocessing, but these VASP infrastructu
 
 Most useful graphify artifacts for this category:
 
-- `skills/vasp-helper/source/graphify-gpt54-out/graph.html`
-  - best for browsing I/O, structure, and file-format-adjacent subsystems interactively
-- `skills/vasp-helper/source/graphify-gpt54-out/graph.json`
-  - best for exact lookup when tracing file-format support
-- `skills/vasp-helper/source/graphify-out/GRAPH_REPORT.md`
-  - useful compact infrastructure-oriented narrative
+- `skills/vasp-helper/source/graphify-out/6.6.0X/graph.json`
+  - use the `6.6.0/graph.json` sibling when comparing against the original baseline
 
 ## Related Pages
 

@@ -44,4 +44,4 @@ Dependency notes:
 - `references/` contains general VASP knowledge pages
 - `projects/` contains project-specific overlays
 - `scripts/` contains standalone helper scripts
-- `vendor/` contains the bundled VASP source submodule and graphify artifacts
+- `source/` contains the bundled VASP source; branch-specific Graphify graphs live under `source/graphify-out/`

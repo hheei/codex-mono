@@ -53,9 +53,7 @@ python3 scripts/vasp_wiki_cli.py ISYM KSPACING KGAMMA
 
 ## Graphify Cross-Reference
 
-- `skills/vasp-helper/source/graphify-gpt54-out/GRAPH_REPORT.md`
-- `skills/vasp-helper/source/graphify-gpt54-out/graph.html`
-- `skills/vasp-helper/source/graphify-out/graph.json`
+- `skills/vasp-helper/source/graphify-out/6.6.0X/graph.json`
 
 ## Related Pages
 

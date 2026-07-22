@@ -11,5 +11,6 @@ CMakeLists.txt
 .graphify-probe/
 .graphify-root-core/
 graphify-gpt54-out/
-graphify-out/
+graphify-out/cache/
+graphify-out/*/cache/
 *.pyc

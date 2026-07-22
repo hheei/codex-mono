@@ -12,16 +12,9 @@ This page explains how to navigate the bundled VASP source without jumping direc
 
 ## Graphify Usage
 
-- `skills/vasp-helper/source/graphify-gpt54-out/GRAPH_REPORT.md`
-  - best human-readable subsystem overview
-- `skills/vasp-helper/source/graphify-gpt54-out/graph.html`
-  - best for interactive relationship browsing
-- `skills/vasp-helper/source/graphify-gpt54-out/graph.json`
-  - best for exact node/edge lookup
-- `skills/vasp-helper/source/graphify-out/GRAPH_REPORT.md`
-  - alternate summary pass
-- `skills/vasp-helper/source/graphify-out/graph.json`
-  - alternate machine-readable graph
+- `skills/vasp-helper/source/graphify-out/6.6.0X/graph.json` is the default plugin-modified graph.
+- `skills/vasp-helper/source/graphify-out/6.6.0/graph.json` is the independent original-baseline graph.
+- Pass the branch-specific file with `graphify query`, `graphify path`, or `graphify explain`; do not compare nodes across the two graphs implicitly.
 
 ## Rules
 

@@ -38,10 +38,12 @@ Use the smallest relevant context first.
 
 ## Source-Navigation Notes
 
-- For source-level questions, query the code graph at `skills/vasp-helper/source/graphify-out/graph.json` before opening raw files.
-- Use `graphify query "<question>" --graph skills/vasp-helper/source/graphify-out/graph.json` for relationship-aware searches.
-- Use `graphify path "<node-a>" "<node-b>" --graph skills/vasp-helper/source/graphify-out/graph.json` to trace a route, or `graphify explain "<node>" --graph skills/vasp-helper/source/graphify-out/graph.json` to inspect a node and its neighbors.
-- The graph is code-only; HTML visualization is intentionally not required. Cite the resulting source locations, then open only the relevant raw files.
+- For source-level questions, query the branch-specific code graph before opening raw files:
+  - `6.6.0`: `skills/vasp-helper/source/graphify-out/6.6.0/graph.json`
+  - `6.6.0X`: `skills/vasp-helper/source/graphify-out/6.6.0X/graph.json`
+- Use `graphify query "<question>" --graph skills/vasp-helper/source/graphify-out/<branch>/graph.json` for relationship-aware searches.
+- Use `graphify path "<node-a>" "<node-b>" --graph skills/vasp-helper/source/graphify-out/<branch>/graph.json` to trace a route, or `graphify explain "<node>" --graph skills/vasp-helper/source/graphify-out/<branch>/graph.json` to inspect a node and its neighbors.
+- The graphs are code-only and independently generated per branch; HTML visualization is intentionally not required. Cite resulting source locations, then open only relevant raw files.
 
 ## Guardrails
 
