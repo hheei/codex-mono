@@ -66,7 +66,7 @@ If the question shifts from diagnosis to implementation, the most useful source 
 
 ## Graphify Cross-Reference
 
-- `skills/vasp-helper/source/graphify-out/6.6.0X/graph.json`
+- `source/graphify-out/6.6.0X/graph.json`
 
 ## Related Pages
 

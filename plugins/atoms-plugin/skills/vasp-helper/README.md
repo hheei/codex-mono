@@ -7,7 +7,7 @@ This directory contains the actual Codex skill content for VASP work, plus stand
 Run the scripts from this directory either through the unified subcommand entrypoint or the existing direct entrypoints:
 
 ```bash
-cd /path/to/vasp-plugin/skills/vasp-helper
+cd /path/to/atoms-plugin/skills/vasp-helper
 
 # Unified entrypoint
 python3 scripts/vasp_helper_cli.py outcar-analysis /path/to/OUTCAR

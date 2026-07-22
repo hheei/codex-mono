@@ -1,56 +1,52 @@
 ---
 name: vasp-helper
-description: Practical VASP workflow support for INCAR tuning, OUTCAR and OSZICAR diagnosis, vaspwave.h5 extraction, restart-file reuse checks, Bader and planar-average workflows, CHGCAR comparisons, run-directory hygiene, VASPKIT guidance, and source-level implementation mapping.
+description: 面向 VASP 的实用工作流支持：INCAR 调参、OUTCAR/OSZICAR 诊断、vaspwave.h5 提取、重启文件复用检查、Bader 与平面平均、CHGCAR 对比、运行目录整理、VASPKIT 指导及源码实现映射。
 ---
-
 # vasp-helper
 
-Use the smallest relevant context first.
+最小必要上下文。
 
-- For installation or helper-script usage questions, route to `README.md` in this skill directory first; it documents both `scripts/vasp_helper_cli.py` subcommands and the preserved direct script entrypoints.
-- Use this file as the only routing/index entrypoint for the skill.
-- The category mapping below replaces the old directory-style index.
-- Use `references/` for general knowledge.
-- Use `projects/` only for project-specific overlays.
-- Use cached wiki pages for narrow INCAR-tag questions.
-- Use graphify only when the question actually requires source-code reading.
-- Do not start by opening raw files under `skills/vasp-helper/source/src/*`.
-- If the user points to a remote run directory, prefer staging small analysis inputs under `/tmp/vasp-helper/` and analyzing the staged local copy first.
+- 安装/helper 问题先读 `README.md`；含 `scripts/vasp_helper_cli.py` 子命令及保留直接入口。
+- 本文件为 skill 唯一路由入口。
+- 通用知识在 `references/`，项目覆盖在 `projects/`，窄范围 INCAR 标签查缓存 wiki。
+- 仅需源码时用 Graphify；勿大量打开 `source/src/*` 原始文件。
+- 远程运行目录：小型输入先暂存 `/tmp/vasp-helper/` 再分析。
 
-## Routing Order
+## 路由顺序
 
-1. Classify the request category.
-2. Open exactly one category page under `references/`.
-3. Use cached wiki pages if tag-level follow-up is needed.
-4. When implementation details are required, use the page's `Implementation Anchors` and graphify cross-references before opening raw source files.
-5. If the question depends on one local project, host setup, or source-branch convention, open the matching note under `projects/`.
-6. If requested inputs live on a remote host, copy small files locally first and run local helper scripts on the staged directory.
+1. 判定请求类别。
+2. 仅打开对应一个 `references/` 页面。
+3. 标签级追问再查缓存 wiki。
+4. 实现细节：先用页面 Implementation Anchors 与 Graphify 缩小源码范围。
+5. 涉及本地项目、主机环境或源码分支，再开对应 `projects/` 说明。
+6. 远程输入：先复制小型文本至本地暂存，再运行 helper。
 
-## Category Mapping
+## 分类映射
 
-- Convergence, stopping conditions, and relax health: `references/electronic-convergence.md`
-- Restart reuse, `LH5`, `WAVECAR`, `CHGCAR`, `vaspwave.h5`: `references/restart-hdf5.md`
-- Density post-processing, Bader, planar averages, and grid differences: `references/density-postprocess.md`
-- Runtime environment, helper binaries, and plotting constraints: `references/platform-runtime.md`
-- Run-directory cleanup, staging, and local hygiene workflows: `references/run-hygiene.md`
-- Symmetry, k-points, and structural inspection: `references/structure-symmetry-kpoints.md`
-- Source-navigation and implementation questions: `references/source-navigation.md`
+- 收敛、停止条件、结构优化健康度：`references/electronic-convergence.md`
+- 重启复用、`LH5`、`WAVECAR`、`CHGCAR`、`vaspwave.h5`：`references/restart-hdf5.md`
+- 密度后处理、Bader、平面平均、网格差异：`references/density-postprocess.md`
+- 运行环境、helper 二进制、绘图约束：`references/platform-runtime.md`
+- 运行目录清理、暂存、本地卫生：`references/run-hygiene.md`
+- 对称性、k 点、结构检查：`references/structure-symmetry-kpoints.md`
+- 源码导航、实现问题：`references/source-navigation.md`
 
-## Source-Navigation Notes
+## 源码与路径
 
-- For source-level questions, query the branch-specific code graph before opening raw files:
-  - `6.6.0`: `skills/vasp-helper/source/graphify-out/6.6.0/graph.json`
-  - `6.6.0X`: `skills/vasp-helper/source/graphify-out/6.6.0X/graph.json`
-- Use `graphify query "<question>" --graph skills/vasp-helper/source/graphify-out/<branch>/graph.json` for relationship-aware searches.
-- Use `graphify path "<node-a>" "<node-b>" --graph skills/vasp-helper/source/graphify-out/<branch>/graph.json` to trace a route, or `graphify explain "<node>" --graph skills/vasp-helper/source/graphify-out/<branch>/graph.json` to inspect a node and its neighbors.
-- The graphs are code-only and independently generated per branch; HTML visualization is intentionally not required. Cite resulting source locations, then open only relevant raw files.
+- Codex 经插件清单 `"skills": "./skills/"` 发现本 skill；本目录含 `SKILL.md`。
+- `references/`、`projects/`、`scripts/`、`source/` 均相对 skill 根目录，非仓库根目录。
+- 默认插件修改分支图：`source/graphify-out/6.6.0X/graph.json`。
+- 原始基线分支图：`source/graphify-out/6.6.0/graph.json`。
+- Graphify 查询在 skill 根目录运行：
+  `graphify query "<问题>" --graph source/graphify-out/<分支>/graph.json`
+- 关系路径用 `graphify path`，节点邻域用 `graphify explain`；均传对应分支 `--graph`。
+- 图仅含源码；两分支独立生成；无需 HTML。
 
-## Guardrails
+## 防护规则
 
-- `scripts/outcar_analysis_cli.py` is intentionally stdlib-only and does not attempt ASE-based bonding or molecule heuristics.
-- Prefer `python3 scripts/vasp_helper_cli.py --help` for a quick inventory of available helper commands, but keep direct script entrypoints available for established workflows and narrow dependency surfaces.
-- For remote directories, prefer `scp` of small text-like inputs such as `OUTCAR`, `OSZICAR`, `INCAR`, `POSCAR`, `CONTCAR`, `KPOINTS`, and `POTCAR` into `/tmp/vasp-helper/<host>/<job-key>/` before analysis.
-- Fall back to direct remote inspection only when transfer is unavailable, files are too large, or the task explicitly requires in-place remote execution.
-- Preserve existing accuracy-sensitive settings by default.
-- Do not change `ENCUT`, `PREC`, `EDIFF`, `EDIFFG`, `KPOINTS` or `KSPACING`, `LREAL`, `ALGO`, `ISMEAR`, `SIGMA`, `LASPH`, `METAGGA`, `IVDW`, or restart and output tags unless the user explicitly asks for tuning.
-- When reusing restart files, check lattice, k-mesh, band count, spin state, and cutoff compatibility first.
+- `scripts/outcar_analysis_cli.py` 仅用 Python 标准库；不做 ASE 成键/分子启发式判断。
+- 快速查看 helper：`python3 scripts/vasp_helper_cli.py --help`；保留既有窄依赖入口。
+- 远程目录优先复制 `OUTCAR`、`OSZICAR`、`INCAR`、`POSCAR`、`CONTCAR`、`KPOINTS`、`POTCAR` 至 `/tmp/vasp-helper/<host>/<job-key>/`。
+- 仅传输不可用、文件过大或用户明确要求原地执行时，直接检查远程目录。
+- 默认保留精度敏感设置；用户未明确要求，不改 `ENCUT`、`PREC`、`EDIFF`、`EDIFFG`、`KPOINTS`、`KSPACING`、`LREAL`、`ALGO`、`ISMEAR`、`SIGMA`、`LASPH`、`METAGGA`、`IVDW` 或重启/输出标签。
+- 复用重启文件前，检查晶格、k 点网格、带数、自旋状态、cutoff 兼容性。

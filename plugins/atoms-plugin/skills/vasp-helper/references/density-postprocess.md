@@ -80,7 +80,7 @@ The plugin-side workflows are mostly postprocessing, but these VASP infrastructu
 
 Most useful graphify artifacts for this category:
 
-- `skills/vasp-helper/source/graphify-out/6.6.0X/graph.json`
+- `source/graphify-out/6.6.0X/graph.json`
   - use the `6.6.0/graph.json` sibling when comparing against the original baseline
 
 ## Related Pages

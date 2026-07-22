@@ -54,7 +54,7 @@ tar -I zstd -xf restart.tar.zst
 
 ## Graphify Cross-Reference
 
-- `skills/vasp-helper/source/graphify-out/6.6.0X/graph.json`
+- `source/graphify-out/6.6.0X/graph.json`
 
 ## Related Pages
 

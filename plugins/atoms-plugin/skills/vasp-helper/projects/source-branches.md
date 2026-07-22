@@ -9,7 +9,7 @@ This page defines the branch naming convention used by this plugin when discussi
   - use `source/graphify-out/6.6.0/graph.json` for its code graph
 - `6.6.0X`
   - the current plugin-modified VASP source line used by this skill
-  - use this as the default target when discussing `skills/vasp-helper/source/` and its graphify outputs
+  - use this as the default target when discussing `source/` and its graphify outputs
   - use `source/graphify-out/6.6.0X/graph.json` for its code graph
 
 ## Default Rule
