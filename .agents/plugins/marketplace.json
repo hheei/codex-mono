@@ -5,7 +5,7 @@
   },
   "plugins": [
     {
-      "name": "ssh-exec",
+      "name": "sshfs",
       "source": {
         "source": "local",
         "path": "./plugins/ssh-exec"

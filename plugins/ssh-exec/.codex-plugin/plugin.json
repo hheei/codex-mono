@@ -1,7 +1,7 @@
 {
-  "name": "ssh-exec",
-  "version": "0.5.0+codex.20260706180744",
-  "description": "Remote command execution sshfs mounting over OpenSSH",
+  "name": "sshfs",
+  "version": "0.5.0+codex.20260720094856",
+  "description": "Use configured OpenSSH hosts through the built-in file tools.",
   "author": {
     "name": "hheei",
     "url": "https://github.com/hheei"
@@ -11,25 +11,26 @@
   "license": "MIT",
   "keywords": [
     "ssh",
-    "mcp",
     "codex",
     "openssh",
     "sshfs"
   ],
   "interface": {
-    "displayName": "SSH Exec",
-    "shortDescription": "Find SSH hosts, run remote commands, mount remote files over OpenSSH.",
-    "longDescription": "SSH Exec provides three tools: host discovering configured remote hosts, mount mounting remote host locally so Codex can use built-in file tools, and exec remote commands such inspection, verification, service control.",
+    "displayName": "SSHFS",
+    "shortDescription": "Access configured OpenSSH hosts with built-in file tools.",
+    "longDescription": "Use paths such as ssh/judy:/etc/hosts or ssh/ileqm:project/file with unified exec and apply_patch. Remote hosts are mounted on demand through sshfs.",
     "developerName": "hheei",
     "category": "Productivity",
     "capabilities": [
-      "MCP",
-      "SSH"
+      "SSH",
+      "PreToolUse hook"
     ],
     "websiteURL": "https://github.com/hheei/ssh-exec",
-    "defaultPrompt": "If you are not sure whether remote host alias exists, use host first. Use mount before editing remote files, then use exec to inspect or verify remote host.",
+    "defaultPrompt": [
+      "Read or edit a file on one of my configured SSH hosts."
+    ],
     "brandColor": "#111827",
     "composerIcon": "./assets/icon.svg"
   },
-  "mcpServers": "./.mcp.json"
+  "hooks": "./hooks/claude-codex-hooks.json"
 }

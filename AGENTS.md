@@ -19,9 +19,6 @@ Repository policy:
 - Keep root files focused on monorepo coordination.
 - When changing exported tool names or public behavior, update tests and README in the same change.
 
-SSH Exec policy:
+SSHFS policy:
 - Plugin path: `plugins/ssh-exec`.
-- Tool names are part of the public interface:
-- `ssh_host`
-- `ssh_mount`
-- `ssh_exec`
+- This plugin exposes only its `PreToolUse` hook; it has no MCP tools.
