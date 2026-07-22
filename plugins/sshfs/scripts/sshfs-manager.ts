@@ -44,7 +44,7 @@ const DEFAULT_MOUNT_ROOT = join(homedir(), ".cache", "sshfs-addon");
 const OPERATION_TIMEOUT_MS = 30_000;
 const ROLLBACK_TIMEOUT_MS = 5_000;
 const PROBE_TIMEOUT_MS = 5_000;
-const REMOTE_TIMEOUT_MS = 30_000;
+const CONNECTIVITY_QUERY_TIMEOUT_MS = 10_000;
 const HEALTH_TIMEOUT_MS = 5_000;
 const HEALTH_RETRY_MS = 100;
 const MAX_OUTPUT_BYTES = 64 * 1024;
@@ -64,7 +64,6 @@ export class SshfsManager {
 	readonly #mountRoot: string;
 	readonly #platform: NodeJS.Platform;
 	readonly #runner: ProcessRunner;
-	readonly #remoteHomes = new Map<string, string>();
 
 	constructor(options: SshfsManagerOptions = {}) {
 		this.#mountRoot = options.mountRoot ?? DEFAULT_MOUNT_ROOT;
@@ -77,7 +76,6 @@ export class SshfsManager {
 			throw new Error(`sshfs is supported only on Linux and macOS; current platform is ${this.#platform}`);
 		}
 
-		const deadline = Date.now() + OPERATION_TIMEOUT_MS;
 		const host = validateSshfsHost(hostValue);
 		const source = `${host}:/`;
 		const segment = encodeURIComponent(host);
@@ -88,6 +86,8 @@ export class SshfsManager {
 
 		await ensureDirectory(this.#mountRoot);
 		const realMountRoot = await realpath(this.#mountRoot);
+		const remoteHome = await this.queryRemoteHome(host);
+		const deadline = Date.now() + OPERATION_TIMEOUT_MS;
 		await mkdir(localPath, { recursive: true, mode: 0o700 });
 		await assertDirectChildDirectory(localPath, realMountRoot);
 
@@ -96,7 +96,7 @@ export class SshfsManager {
 			throw new Error(`sshfs mount path is occupied by another filesystem: ${localPath}`);
 		}
 		if (current.state === "matching" && current.healthy) {
-			return await this.result(host, localPath, "reused", deadline);
+			return this.result(host, localPath, remoteHome, "reused");
 		}
 		if (current.state === "matching") {
 			const afterUnmount = await this.unmount(localPath, source, deadline);
@@ -143,43 +143,52 @@ export class SshfsManager {
 			throw error;
 		}
 
-		return await this.result(host, localPath, "mounted", deadline);
+		return this.result(host, localPath, remoteHome, "mounted");
 	}
 
-	private async result(
+	private result(
 		host: string,
 		localPath: string,
+		remoteHome: string,
 		status: SshfsResult["status"],
-		deadline: number,
-	): Promise<SshfsResult> {
-		let remoteHome = this.#remoteHomes.get(host);
-		if (!remoteHome) {
-			const response = await this.run("ssh", [
-				"-n",
-				"-o", "ServerAliveInterval=300",
-				"-o", "ServerAliveCountMax=3",
-				"-o", "ConnectTimeout=30",
-				"-o", "BatchMode=yes",
-				"-o", "StrictHostKeyChecking=accept-new",
-				host,
-				"printf %s \"$HOME\"",
-			], REMOTE_TIMEOUT_MS, deadline);
-			if (response.timedOut) throw new Error(`Timed out resolving the remote home for ${host}`);
-			if (response.exitCode !== 0 || !response.stdout.trim()) {
-				const detail = response.stderr.trim() || response.stdout.trim();
-				throw new Error(`Unable to resolve the remote home for ${host}${detail ? `: ${detail}` : ""}`);
-			}
-			remoteHome = posix.normalize(response.stdout.trim());
-			if (!posix.isAbsolute(remoteHome)) throw new Error(`Invalid remote home for ${host}`);
-			this.#remoteHomes.set(host, remoteHome);
-		}
-
+	): SshfsResult {
 		const root = resolve(localPath);
 		const remoteHomeLocalPath = resolve(root, remoteHome.slice(1));
 		if (remoteHomeLocalPath !== root && !remoteHomeLocalPath.startsWith(`${root}/`)) {
 			throw new Error(`Remote home escapes the SSHFS mount for ${host}`);
 		}
 		return { host, localPath, remoteHomeLocalPath, status };
+	}
+
+	private async queryRemoteHome(host: string): Promise<string> {
+		const deadline = Date.now() + CONNECTIVITY_QUERY_TIMEOUT_MS;
+		let lastResponse: ProcessResult | undefined;
+		for (let attempt = 0; attempt < 2; attempt += 1) {
+			if (Date.now() >= deadline) break;
+			lastResponse = await this.run("ssh", [
+				"-n",
+				"-o", "ServerAliveInterval=5",
+				"-o", "ServerAliveCountMax=1",
+				"-o", "ConnectTimeout=8",
+				"-o", "ConnectionAttempts=1",
+				"-o", "BatchMode=yes",
+				"-o", "StrictHostKeyChecking=accept-new",
+				host,
+				"printf %s \"$HOME\"",
+			], CONNECTIVITY_QUERY_TIMEOUT_MS, deadline);
+			if (lastResponse.exitCode === 0 && lastResponse.stdout.trim()) break;
+			if (attempt === 0 && Date.now() + HEALTH_RETRY_MS < deadline) await delay(HEALTH_RETRY_MS);
+		}
+		if (!lastResponse || lastResponse.timedOut || Date.now() >= deadline) {
+			throw new Error(`SSH host ${host} did not respond within ${CONNECTIVITY_QUERY_TIMEOUT_MS / 1000} seconds`);
+		}
+		if (lastResponse.exitCode !== 0 || !lastResponse.stdout.trim()) {
+			const detail = lastResponse.stderr.trim() || lastResponse.stdout.trim();
+			throw new Error(`SSH host ${host} is not reachable${detail ? `: ${detail}` : ""}`);
+		}
+		const remoteHome = posix.normalize(lastResponse.stdout.trim());
+		if (!posix.isAbsolute(remoteHome)) throw new Error(`Invalid remote home for ${host}`);
+		return remoteHome;
 	}
 
 	private async probeMount(localPath: string, source: string, deadline: number): Promise<MountProbe> {

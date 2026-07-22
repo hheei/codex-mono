@@ -35,6 +35,8 @@ function harness() {
 	let filesystemSource: string | undefined;
 	let visibilityDelay = 0;
 	let sshfsResult: ProcessResult = { exitCode: 0, stdout: "", stderr: "" };
+	let sshResult: ProcessResult = { exitCode: 0, stdout: "/home/test", stderr: "" };
+	let sshResults: ProcessResult[] = [];
 	let unmountFails = false;
 
 	const runner: ProcessRunner = async (command, args) => {
@@ -49,7 +51,7 @@ function harness() {
 			return ok(`Filesystem 512-blocks Used Available Capacity Mounted on\n${source} 1 1 1 1% ${args.at(-1)}\n`);
 		}
 		if (command === "ls") return mounted?.healthy === false ? fail("stale") : ok();
-		if (command === "ssh") return ok("/home/test");
+		if (command === "ssh") return sshResults.shift() ?? sshResult;
 		if (command === "sshfs") {
 			const source = args.at(-2)!;
 			const path = args.at(-1)!;
@@ -72,6 +74,8 @@ function harness() {
 		setFilesystemSource: (value: string | undefined) => { filesystemSource = value; },
 		setVisibilityDelay: (value: number) => { visibilityDelay = value; },
 		setSshfsResult: (value: ProcessResult) => { sshfsResult = value; },
+		setSshResult: (value: ProcessResult) => { sshResult = value; },
+		setSshResults: (value: ProcessResult[]) => { sshResults = [...value]; },
 		setUnmountFails: (value: boolean) => { unmountFails = value; },
 	};
 }
@@ -101,7 +105,9 @@ describe("sshfs manager", () => {
 		});
 		expect(second.status).toBe("reused");
 		expect(host.calls.filter((call) => call.command === "sshfs")).toHaveLength(1);
-		expect(host.calls.find((call) => call.command === "ssh")?.args).toContain("ConnectTimeout=30");
+		expect(host.calls.filter((call) => call.command === "ssh")).toHaveLength(2);
+		expect(host.calls.find((call) => call.command === "ssh")?.args).toContain("ConnectTimeout=8");
+		expect(host.calls.find((call) => call.command === "sshfs")?.args).toContain("ConnectTimeout=30");
 	});
 
 	test("refuses a mountpoint occupied by another filesystem", async () => {
@@ -167,6 +173,28 @@ describe("sshfs manager", () => {
 		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: host.runner });
 
 		await expect(manager.ensureMounted("prod")).rejects.toThrow("binary not found");
+	});
+
+	test("fails before touching sshfs when the connectivity query fails", async () => {
+		const mountRoot = await temporaryMountRoot();
+		const host = harness();
+		host.setSshResult({ exitCode: 255, stdout: "", stderr: "unreachable" });
+		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: host.runner });
+
+		await expect(manager.ensureMounted("offline")).rejects.toThrow("not reachable");
+		expect(host.calls.some((call) => call.command === "sshfs")).toBe(false);
+		expect(host.calls.filter((call) => call.command === "ssh")).toHaveLength(2);
+	});
+
+	test("mounts when a transient connectivity failure recovers on the second query", async () => {
+		const mountRoot = await temporaryMountRoot();
+		const host = harness();
+		host.setSshResults([fail("network changed"), ok("/home/test")]);
+		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: host.runner });
+
+		expect((await manager.ensureMounted("recovering")).status).toBe("mounted");
+		expect(host.calls.filter((call) => call.command === "ssh")).toHaveLength(2);
+		expect(host.calls.filter((call) => call.command === "sshfs")).toHaveLength(1);
 	});
 
 	test("uses a traversal-safe path and the macOS local option", async () => {

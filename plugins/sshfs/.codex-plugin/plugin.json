@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "SSHFS",
     "shortDescription": "Explicitly mount SSH remote files before accessing them.",
-    "longDescription": "For every SSH remote file read, write, edit, search, listing, or inspection request, call sshfs first. It mounts only the remote root and returns local root and remote-home paths for built-in file tools.",
+    "longDescription": "For every SSH remote file read, write, edit, search, listing, or inspection request, call sshfs first. It checks reachability, mounts only the remote root, and returns local root and remote-home paths for built-in file tools.",
     "developerName": "hheei",
     "category": "Productivity",
     "capabilities": [

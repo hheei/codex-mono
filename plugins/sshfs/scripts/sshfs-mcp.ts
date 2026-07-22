@@ -27,7 +27,7 @@ const SERVER_INFO = { name: "sshfs", version: "0.6.0" };
 
 const SSHFS_TOOL = {
 	name: "sshfs",
-	description: "MANDATORY for every SSH remote file read, write, edit, search, listing, or inspection request. Call this tool first, then use local file tools under the returned paths. It mounts only the remote root (<host>:/); do not use direct SSH commands for remote file operations. Local grep and find are supported, but must target a narrow directory or file; never recursively scan the mounted root.",
+	description: "MANDATORY for every SSH remote file read, write, edit, search, listing, or inspection request. Call this tool first, then use local file tools under the returned paths. It first runs a short SSH reachability query, then mounts only the remote root (<host>:/). A reachable healthy mount is reused and never remounted. Do not use direct SSH commands for remote file operations. Local grep and find are supported, but must target a narrow directory or file; never recursively scan the mounted root.",
 	inputSchema: {
 		type: "object",
 		properties: {
