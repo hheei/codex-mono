@@ -39,6 +39,7 @@ codex plugin marketplace add hheei/codex-mono --ref main
 codex plugin add sshfs@codex-mono
 codex plugin add singbox@codex-mono
 codex plugin add my-ppt@codex-mono
+codex plugin add atoms-plugin@codex-mono
 ```
 
-The marketplace currently publishes `sshfs`, `singbox`, and `my-ppt`. `atoms-plugin` is kept in the monorepo as a local package and requires access to its private VASP submodule.
+The marketplace publishes all four plugins. `atoms-plugin` requires access to its private VASP submodule for `vasp-helper` source-navigation features.

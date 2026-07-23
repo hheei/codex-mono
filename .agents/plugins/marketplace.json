@@ -5,6 +5,18 @@
   },
   "plugins": [
     {
+      "name": "atoms-plugin",
+      "source": {
+        "source": "local",
+        "path": "./plugins/atoms-plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
       "name": "sshfs",
       "source": {
         "source": "local",
