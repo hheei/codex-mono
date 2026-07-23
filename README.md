@@ -39,8 +39,9 @@ codex plugin add atoms-plugin@codex-mono
 # Find the marketplace checkout path registered by Codex.
 codex plugin marketplace list
 
-# Set this to the ROOT shown for codex-mono above.
-MARKETPLACE_ROOT="$HOME/.codex/.tmp/marketplaces/codex-mono"
+# Read the ROOT shown for codex-mono above; do not assume a cache path.
+MARKETPLACE_ROOT="$(codex plugin marketplace list | awk '$1 == \"codex-mono\" {print $2; exit}')"
+test -n "$MARKETPLACE_ROOT" && test -d "$MARKETPLACE_ROOT"
 git -C "$MARKETPLACE_ROOT" submodule update --init --recursive
 
 # Refresh the installed plugin cache after the source appears.
