@@ -30,14 +30,25 @@ For an existing checkout, initialize or update all submodules with:
 git submodule update --init --recursive
 ```
 
-`codex plugin add` does not run Git's submodule initialization. It can install `atoms-plugin`, but its `vasp-helper/source/` directory will be empty when the marketplace snapshot has an uninitialized submodule. To install `atoms-plugin` with the private VASP source available, use the initialized checkout as a local marketplace:
+`codex plugin add` does not run Git's submodule initialization. It can install `atoms-plugin`, but its `vasp-helper/source/` directory will be empty when the marketplace snapshot has an uninitialized submodule. Install it from the Git marketplace first, then initialize the submodule in Codex's marketplace checkout:
 
 ```bash
-git clone --recurse-submodules https://github.com/hheei/codex-mono.git
-cd codex-mono
-codex plugin marketplace add "$PWD"
+codex plugin marketplace add hheei/codex-mono --ref main
+codex plugin add atoms-plugin@codex-mono
+
+# Find the marketplace checkout path registered by Codex.
+codex plugin marketplace list
+
+# Set this to the ROOT shown for codex-mono above.
+MARKETPLACE_ROOT="$HOME/.codex/.tmp/marketplaces/codex-mono"
+git -C "$MARKETPLACE_ROOT" submodule update --init --recursive
+
+# Refresh the installed plugin cache after the source appears.
+codex plugin remove atoms-plugin@codex-mono
 codex plugin add atoms-plugin@codex-mono
 ```
+
+The submodule clone uses your normal Git credentials, so the account must have access to the private [`hheei/vasp-source`](https://github.com/hheei/vasp-source) repository. Re-run the `git -C ... submodule update` step after upgrading the marketplace snapshot.
 
 ## Install
 
@@ -50,4 +61,4 @@ codex plugin add singbox@codex-mono
 codex plugin add my-ppt@codex-mono
 ```
 
-The marketplace publishes all four plugins. The first three can be installed directly from the Git marketplace; install `atoms-plugin` from an initialized local checkout as shown above so its private VASP submodule is present.
+The marketplace publishes all four plugins. The first three can be installed directly from the Git marketplace; `atoms-plugin` needs the manual submodule initialization step above so its private VASP source is present.
