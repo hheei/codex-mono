@@ -30,6 +30,15 @@ For an existing checkout, initialize or update all submodules with:
 git submodule update --init --recursive
 ```
 
+`codex plugin add` does not run Git's submodule initialization. It can install `atoms-plugin`, but its `vasp-helper/source/` directory will be empty when the marketplace snapshot has an uninitialized submodule. To install `atoms-plugin` with the private VASP source available, use the initialized checkout as a local marketplace:
+
+```bash
+git clone --recurse-submodules https://github.com/hheei/codex-mono.git
+cd codex-mono
+codex plugin marketplace add "$PWD"
+codex plugin add atoms-plugin@codex-mono
+```
+
 ## Install
 
 Install the marketplace from GitHub:
@@ -39,7 +48,6 @@ codex plugin marketplace add hheei/codex-mono --ref main
 codex plugin add sshfs@codex-mono
 codex plugin add singbox@codex-mono
 codex plugin add my-ppt@codex-mono
-codex plugin add atoms-plugin@codex-mono
 ```
 
-The marketplace publishes all four plugins. `atoms-plugin` requires access to its private VASP submodule for `vasp-helper` source-navigation features.
+The marketplace publishes all four plugins. The first three can be installed directly from the Git marketplace; install `atoms-plugin` from an initialized local checkout as shown above so its private VASP submodule is present.
