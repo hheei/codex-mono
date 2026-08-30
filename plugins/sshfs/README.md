@@ -1,10 +1,12 @@
 # SSHFS
 
-This plugin exposes one MCP tool: `sshfs`.
+This plugin exposes three MCP tools: `host_list`, `host_exec`, and `host_mount`.
 
-Call it explicitly with an OpenSSH host alias. It only mounts the remote root (`<host>:/`) under `~/.cache/sshfs-addon/<host>/` and returns `localPath` plus `remoteHomeLocalPath`, the local path corresponding to the remote user's home directory.
+`host_list` reads the user's `~/.ssh/config` and recursively included files. It returns explicit aliases in first-seen order, skips wildcard and negated patterns, and does not read the system SSH config or run SSH.
 
-For every SSH remote file read, write, edit, search, listing, or inspection request, the model must call `sshfs` first and then use built-in local file tools under one of the returned paths. Direct SSH commands are not used for remote file operations.
+`host_exec` runs one complete command string on a specified host using the remote account's default shell. It accepts optional `cwd` and `timeoutMs` (1 to 300000 milliseconds), captures stdout and stderr, and returns remote non-zero exit codes as structured data. It is non-interactive and does not support sudo or password prompts.
+
+For every SSH remote file read, write, edit, search, listing, or inspection request, call `host_mount` first and then use built-in local file tools under one of the returned paths. It mounts the remote root (`<host>:/`) under `~/.cache/sshfs-addon/<host>/` and returns `localPath` plus `remoteHomeLocalPath`, the local path corresponding to the remote user's home directory.
 
 Healthy matching mounts are reused across compatible clients, including Pi Basics, and are never remounted. The MCP server leaves healthy mounts in place when it exits. A conflicting filesystem is never unmounted or replaced.
 

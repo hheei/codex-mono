@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { chmod, lstat, mkdir, readdir, realpath, rmdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, posix, resolve } from "node:path";
@@ -24,6 +24,23 @@ export interface SshfsResult {
 	status: "mounted" | "reused";
 }
 
+export interface HostExecInput {
+	host: string;
+	command: string;
+	cwd?: string;
+	timeoutMs?: number;
+}
+
+export interface HostExecResult {
+	host: string;
+	command: string;
+	cwd?: string;
+	exitCode: number;
+	stdout: string;
+	stderr: string;
+	timedOut: false;
+}
+
 export interface SshfsManagerOptions {
 	mountRoot?: string;
 	platform?: NodeJS.Platform;
@@ -47,16 +64,16 @@ const PROBE_TIMEOUT_MS = 5_000;
 const CONNECTIVITY_QUERY_TIMEOUT_MS = 10_000;
 const HEALTH_TIMEOUT_MS = 5_000;
 const HEALTH_RETRY_MS = 100;
-const MAX_OUTPUT_BYTES = 64 * 1024;
+const OUTPUT_EDGE_BYTES = 5 * 1024;
 const SSHFS_MOUNT_TYPE =
 	/(?:^|[\s,(])(?:fuse\.)?sshfs(?:[\s,)]|$)|(?:^|[\s,(])(?:mac|osx)fuse(?:[\s,)]|$)/i;
 
-export function validateSshfsHost(value: string): string {
+export function validateHost(value: string): string {
 	const host = value.trim();
-	if (host === "") throw new Error("sshfs.host must be a non-empty string");
-	if (host.startsWith("-")) throw new Error("sshfs.host must not start with '-'");
-	if (/[\0\r\n\t ]/.test(host)) throw new Error("sshfs.host must not contain whitespace");
-	if (/[\/:]/.test(host)) throw new Error("sshfs.host must not contain a path or port; use an OpenSSH alias");
+	if (host === "") throw new Error("host must be a non-empty string");
+	if (host.startsWith("-")) throw new Error("host must not start with '-'");
+	if (/[\0\r\n\t ]/.test(host)) throw new Error("host must not contain whitespace");
+	if (/[\/:]/.test(host)) throw new Error("host must not contain a path or port; use an OpenSSH alias");
 	return host;
 }
 
@@ -71,12 +88,58 @@ export class SshfsManager {
 		this.#runner = options.runner ?? runProcess;
 	}
 
+	async execOnHost(input: HostExecInput): Promise<HostExecResult> {
+		const host = validateHost(input.host);
+		if (typeof input.command !== "string" || input.command.length === 0 || input.command.includes("\0")) {
+			throw new Error("command must be a non-empty string without NUL");
+		}
+		if (input.cwd !== undefined && (input.cwd.length === 0 || input.cwd.includes("\0") || /[\r\n]/.test(input.cwd))) {
+			throw new Error("cwd must be a non-empty string without NUL, CR, or LF");
+		}
+		const timeoutMs = input.timeoutMs ?? 30_000;
+		if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 300_000) {
+			throw new Error("timeoutMs must be an integer between 1 and 300000");
+		}
+		const remoteCommand = input.cwd === undefined
+			? input.command
+			: `cd -- ${quoteShellWord(input.cwd)} && ${input.command}`;
+		let response: ProcessResult;
+		try {
+			response = await this.#runner("ssh", [
+				...sshArguments(),
+				"--",
+				host,
+				remoteCommand,
+			], timeoutMs);
+		} catch (error) {
+			throw new Error(`Unable to start SSH for ${host}: ${error instanceof Error ? error.message : String(error)}`);
+		}
+		if (response.timedOut) throw new Error(`SSH command on ${host} timed out`);
+		const stdout = truncateOutput(response.stdout);
+		const stderr = truncateOutput(response.stderr);
+		if (response.exitCode === null || response.exitCode === 127) {
+			throw new Error(`Unable to start SSH for ${host}`);
+		}
+		if (response.exitCode === 255 && isSshDiagnostic(stderr)) {
+			throw new Error(`SSH host ${host} is not reachable: ${stderr.trim() || "connection failed"}`);
+		}
+		return {
+			host,
+			command: input.command,
+			...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+			exitCode: response.exitCode,
+			stdout,
+			stderr,
+			timedOut: false,
+		};
+	}
+
 	async ensureMounted(hostValue: string): Promise<SshfsResult> {
 		if (this.#platform !== "linux" && this.#platform !== "darwin") {
 			throw new Error(`sshfs is supported only on Linux and macOS; current platform is ${this.#platform}`);
 		}
 
-		const host = validateSshfsHost(hostValue);
+		const host = validateHost(hostValue);
 		const source = `${host}:/`;
 		const segment = encodeURIComponent(host);
 		const localPath = join(
@@ -166,13 +229,7 @@ export class SshfsManager {
 		for (let attempt = 0; attempt < 2; attempt += 1) {
 			if (Date.now() >= deadline) break;
 			lastResponse = await this.run("ssh", [
-				"-n",
-				"-o", "ServerAliveInterval=5",
-				"-o", "ServerAliveCountMax=1",
-				"-o", "ConnectTimeout=8",
-				"-o", "ConnectionAttempts=1",
-				"-o", "BatchMode=yes",
-				"-o", "StrictHostKeyChecking=accept-new",
+				...sshArguments(),
 				host,
 				"printf %s \"$HOME\"",
 			], CONNECTIVITY_QUERY_TIMEOUT_MS, deadline);
@@ -255,6 +312,26 @@ export class SshfsManager {
 	}
 }
 
+function sshArguments(): string[] {
+	return [
+		"-n",
+		"-o", "ServerAliveInterval=300",
+		"-o", "ServerAliveCountMax=1",
+		"-o", "ConnectTimeout=15",
+		"-o", "ConnectionAttempts=1",
+		"-o", "BatchMode=yes",
+		"-o", "StrictHostKeyChecking=accept-new",
+	];
+}
+
+function quoteShellWord(value: string): string {
+	return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function isSshDiagnostic(stderr: string): boolean {
+	return /(?:^|\n)ssh:|Could not resolve hostname|connect to host|Permission denied \(publickey|Host key verification failed/i.test(stderr);
+}
+
 function findMountEntry(output: string, localPath: string): MountEntry | undefined {
 	const escapedPath = localPath
 		.replaceAll("\\", "\\134")
@@ -296,19 +373,69 @@ async function assertDirectChildDirectory(path: string, realParent: string): Pro
 
 async function runProcess(command: string, args: string[], timeoutMs: number): Promise<ProcessResult> {
 	return await new Promise((resolve) => {
-		execFile(command, args, {
-			encoding: "utf8",
-			killSignal: "SIGKILL",
-			maxBuffer: MAX_OUTPUT_BYTES,
-			timeout: timeoutMs,
-		}, (error, stdout, stderr) => {
-			const code = error && "code" in error ? error.code : 0;
-			resolve({
-				exitCode: code === "ENOENT" ? 127 : typeof code === "number" ? code : error ? null : 0,
-				stdout: String(stdout ?? ""),
-				stderr: String(stderr ?? ""),
-				timedOut: Boolean(error && "killed" in error && error.killed),
-			});
-		});
+		const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+		const stdout = new BoundedOutput();
+		const stderr = new BoundedOutput();
+		let timedOut = false;
+		let settled = false;
+		const timer = setTimeout(() => {
+			timedOut = true;
+			child.kill("SIGKILL");
+		}, timeoutMs);
+		const finish = (exitCode: number | null) => {
+			if (settled) return;
+			settled = true;
+			clearTimeout(timer);
+			resolve({ exitCode, stdout: stdout.value(), stderr: stderr.value(), timedOut });
+		};
+		child.stdout.on("data", (chunk: Buffer | string) => stdout.append(chunk));
+		child.stderr.on("data", (chunk: Buffer | string) => stderr.append(chunk));
+		child.on("error", (error: NodeJS.ErrnoException) => finish(error.code === "ENOENT" ? 127 : null));
+		child.on("close", (code) => finish(code));
 	});
+}
+
+class BoundedOutput {
+	#head = Buffer.alloc(0);
+	#tail = Buffer.alloc(0);
+	#full = Buffer.alloc(0);
+	#total = 0;
+
+	append(chunk: Buffer | string): void {
+		const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+		this.#total += buffer.length;
+		if (this.#full.length <= OUTPUT_EDGE_BYTES * 2) {
+			this.#full = Buffer.concat([this.#full, buffer]).subarray(0, OUTPUT_EDGE_BYTES * 2);
+		}
+		if (this.#head.length < OUTPUT_EDGE_BYTES) {
+			this.#head = Buffer.concat([this.#head, buffer]).subarray(0, OUTPUT_EDGE_BYTES);
+		}
+		this.#tail = Buffer.concat([this.#tail, buffer]);
+		if (this.#tail.length > OUTPUT_EDGE_BYTES) this.#tail = this.#tail.subarray(-OUTPUT_EDGE_BYTES);
+	}
+
+	value(): string {
+		if (this.#total <= OUTPUT_EDGE_BYTES * 2) return this.#full.toString("utf8");
+		const omitted = this.#total - OUTPUT_EDGE_BYTES * 2;
+		return `${this.#head.toString("utf8")}\n...[output truncated; omitted ${formatByteCount(omitted)}]...\n${this.#tail.toString("utf8")}`;
+	}
+}
+
+function truncateOutput(value: string): string {
+	const buffer = Buffer.from(value, "utf8");
+	if (buffer.length <= OUTPUT_EDGE_BYTES * 2) return value;
+	const omitted = buffer.length - OUTPUT_EDGE_BYTES * 2;
+	return `${buffer.subarray(0, OUTPUT_EDGE_BYTES).toString("utf8")}\n...[output truncated; omitted ${formatByteCount(omitted)}]...\n${buffer.subarray(-OUTPUT_EDGE_BYTES).toString("utf8")}`;
+}
+
+function formatByteCount(bytes: number): string {
+	const units = ["bytes", "KiB", "MiB", "GiB"];
+	let value = bytes;
+	let unitIndex = 0;
+	while (value >= 1024 && unitIndex < units.length - 1) {
+		value /= 1024;
+		unitIndex += 1;
+	}
+	const formatted = Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "");
+	return `${formatted} ${units[unitIndex]}`;
 }

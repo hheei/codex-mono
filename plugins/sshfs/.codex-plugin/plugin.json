@@ -1,7 +1,7 @@
 {
   "name": "sshfs",
-  "version": "0.6.0",
-  "description": "Explicitly mount configured OpenSSH hosts for use with local file tools.",
+  "version": "0.7.0",
+  "description": "Discover configured OpenSSH hosts, execute remote commands, and explicitly mount remote files.",
   "author": {
     "name": "hheei",
     "url": "https://github.com/hheei"
@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "SSHFS",
     "shortDescription": "Explicitly mount SSH remote files before accessing them.",
-    "longDescription": "This plugin exposes exactly one MCP tool, sshfs. For every SSH remote file read, write, edit, search, listing, or inspection request, call sshfs first. It checks reachability, mounts only <host>:/ under ~/.cache/sshfs-addon/<host>/, and returns localPath plus remoteHomeLocalPath for built-in file tools. Healthy matching mounts are reused and never remounted.",
+    "longDescription": "This plugin exposes host_list to discover explicit aliases from the user's ~/.ssh/config and included files, host_exec to run non-interactive process or service commands in a host's default shell, and host_mount to mount <host>:/ under ~/.cache/sshfs-addon/<host>/ for local file tools. host_exec does not support sudo or password prompts. Healthy mounts are reused and conflicting filesystems are never unmounted.",
     "developerName": "hheei",
     "category": "Productivity",
     "capabilities": [
@@ -26,7 +26,7 @@
       "SSH"
     ],
     "websiteURL": "https://github.com/hheei/codex-mono",
-    "defaultPrompt": "For every SSH remote file read, write, edit, search, listing, or inspection request, you must call sshfs first and then use local file tools under its returned paths. Do not use direct SSH commands for remote file operations. Keep grep and find scoped to narrow paths; never recursively scan a mounted root.",
+    "defaultPrompt": "Use host_list to discover configured SSH aliases. For every SSH remote file read, write, edit, search, listing, or inspection request, call host_mount first and then use local file tools under its returned paths. Use host_exec for remote process or service commands; it is non-interactive and does not support sudo or password prompts. Keep grep and find scoped to narrow paths; never recursively scan a mounted root.",
     "brandColor": "#111827",
     "composerIcon": "./assets/icon.svg"
   },

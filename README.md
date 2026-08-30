@@ -9,9 +9,9 @@ This is a monorepo for Codex plugins. Each directory under `plugins/` is an inde
 | `atoms-plugin` | `0.1.1` | ASE-based atomistic structure conversion and the `vasp-helper` skill. Its VASP source is a private submodule. |
 | `my-ppt` | `0.1.0+codex.20260709192819` | Presentation strategy, storytelling, visual direction, deck review, examples, and local slide-plan scripts. |
 | `singbox` | `0.1.0` | Local SFM/sing-box and Clash API routing inspection, selector switching, and domain tests. |
-| `sshfs` | `0.6.0` | One explicit MCP tool that mounts an SSH remote root for local file tools and reuses healthy shared mounts. |
+| `sshfs` | `0.7.0` | `host_list`, `host_exec`, and `host_mount` for SSH host discovery, remote commands, and shared SSHFS mounts. |
 
-The `sshfs` plugin exposes one MCP tool. Call it with an OpenSSH host alias before any remote file read, write, edit, search, listing, or inspection; it returns `localPath` and `remoteHomeLocalPath` under `~/.cache/sshfs-addon/<host>/`.
+The `sshfs` plugin exposes `host_list`, `host_exec`, and `host_mount`. Use `host_list` for configured aliases, `host_exec` for non-interactive remote process or service commands, and call `host_mount` before any remote file read, write, edit, search, listing, or inspection; it returns `localPath` and `remoteHomeLocalPath` under `~/.cache/sshfs-addon/<host>/`.
 
 The `vasp-helper` source is a private submodule from [`hheei/vasp-source`](https://github.com/hheei/vasp-source); the VASP source is not stored in this repository. You need access to that private repository to use `atoms-plugin`'s source-navigation features.
 

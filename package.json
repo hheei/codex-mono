@@ -2,7 +2,7 @@
   "name": "codex-mono",
   "version": "0.5.0",
   "private": true,
-  "description": "Codex plugin monorepo with an explicit SSHFS MCP tool and local workflow plugins",
+  "description": "Codex plugin monorepo with SSH host tools, shared SSHFS mounts, and local workflow plugins",
   "type": "module",
   "license": "MIT",
   "homepage": "https://github.com/hheei/codex-mono",
@@ -28,5 +28,9 @@
     "sshfs",
     "openssh",
     "remote"
-  ]
+  ],
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "bun-types": "^1.4.0"
+  }
 }

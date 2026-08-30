@@ -3,7 +3,7 @@
     "sshfs": {
       "cwd": ".",
       "command": "bun",
-      "args": ["./scripts/sshfs-mcp.ts"]
+      "args": ["./scripts/mcp.ts"]
     }
   }
 }
