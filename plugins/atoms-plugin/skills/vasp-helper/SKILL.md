@@ -1,6 +1,6 @@
 ---
 name: vasp-helper
-description: 面向 VASP 的实用工作流支持：INCAR 调参、OUTCAR/OSZICAR 诊断、vaspwave.h5 提取、重启文件复用检查、Bader 与平面平均、CHGCAR 对比、运行目录整理、VASPKIT 指导及源码实现映射。
+description: 當使用者需要建立 VASP static 單點重跑、沿用 CHGCAR/TAUCAR、診斷 INCAR/OUTCAR、處理 vaspwave.h5、Bader、平面平均、CHGCAR 對比、運行目錄整理或 VASP 源碼映射時使用。
 ---
 # vasp-helper
 
@@ -11,6 +11,7 @@ description: 面向 VASP 的实用工作流支持：INCAR 调参、OUTCAR/OSZICA
 - 通用知识在 `references/`，项目覆盖在 `projects/`，窄范围 INCAR 标签查缓存 wiki。
 - 仅需源码时用 Graphify；勿大量打开外部 submodule 的 `source/src/*` 原始文件。
 - 远程运行目录：小型输入先暂存 `/tmp/vasp-helper/` 再分析。
+- static 單點重跑：使用 `scripts/create_static_rerun.py <vasp-directory>`，自動輸出到下一個 `<vasp-directory>/rerunNNNN-static/`；任一 `rerunNNNN-*` 已使用該序號即跳過。`CHGCAR`、`TAUCAR`、`WAVECAR`、`vaspwave.h5` 自動偵測並帶入；只由 `WAVECAR`/`CHGCAR` 自動設定 `ISTART`/`ICHARG`。`LH5`、`LMIXTAU` 與生成型 tag 保留原值，需變更時以重複的 `--set KEY=VALUE` 傳入。
 
 ## 路由顺序
 
