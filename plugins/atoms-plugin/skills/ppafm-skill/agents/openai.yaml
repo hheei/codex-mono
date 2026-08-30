@@ -1,0 +1,4 @@
+interface:
+  display_name: "PPAFM Simulation"
+  short_description: "Run and debug native ppafm AFM workflows."
+  default_prompt: "Use $ppafm-skill to run, debug, tune, or align a native ppafm AFM workflow from VASP outputs."

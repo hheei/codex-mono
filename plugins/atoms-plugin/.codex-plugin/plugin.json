@@ -9,7 +9,7 @@
   "interface": {
     "displayName": "Atoms Plugin",
     "shortDescription": "Convert atomistic structures with ASE.",
-    "longDescription": "Atoms Plugin provides local Codex skills and scripts for ASE-based atomistic structure conversion workflows.",
+    "longDescription": "Atoms Plugin provides local Codex skills and scripts for ASE-based atomistic structure conversion, VASP workflows, and PP-AFM simulations from VASP outputs.",
     "developerName": "Local developer",
     "category": "Productivity",
     "capabilities": [

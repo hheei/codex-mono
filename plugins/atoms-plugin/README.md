@@ -1,6 +1,6 @@
 # Atoms Plugin
 
-ASE-based atomistic structure utilities and the `vasp-helper` skill for VASP analysis, runtime hygiene, and source navigation.
+ASE-based atomistic structure utilities, `vasp-helper` for VASP work, and `ppafm-skill` for PP-AFM simulations from VASP outputs.
 
 ## Initialize The Private Source
 

@@ -6,7 +6,7 @@ This is a monorepo for Codex plugins. Each directory under `plugins/` is an inde
 
 | Plugin | Version | Contents |
 | --- | --- | --- |
-| `atoms-plugin` | `0.1.1` | ASE-based atomistic structure conversion and the `vasp-helper` skill. Its VASP source is a private submodule. |
+| `atoms-plugin` | `0.1.1` | ASE-based atomistic structure conversion, VASP workflows, and the `ppafm-skill`. Its VASP source is a private submodule. |
 | `my-ppt` | `0.1.0+codex.20260709192819` | Presentation strategy, storytelling, visual direction, deck review, examples, and local slide-plan scripts. |
 | `singbox` | `0.1.0` | Local SFM/sing-box and Clash API routing inspection, selector switching, and domain tests. |
 | `sshfs` | `0.7.0` | `host_list`, `host_exec`, and `host_mount` for SSH host discovery, remote commands, and shared SSHFS mounts. |
