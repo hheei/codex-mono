@@ -13,9 +13,10 @@ Use this skill for local SFM/sing-box routing work. Prefer read-only inspection 
 - SFM uses the `io.nekohasekai` sing-box runtime.
 - The local HTTP proxy observed from Codex is `127.0.0.1:7890`.
 - macOS system proxy may be disabled even when Codex is already using `127.0.0.1:7890` through environment variables.
-- The sing-box Clash-compatible API is configured at `127.0.0.1:9090` with an empty secret.
-- Relevant config file observed: `~/.config/singbox/config.json`.
-- The API reported mode `rule`; selector group `Default` controlled the route used by Codex/browser requests.
+- The Clash-compatible API was previously available at `127.0.0.1:9090` with an empty secret, but it may be disabled in the active SFM profile. Probe it before relying on API commands.
+- Current SFM profiles live under `~/Library/Group Containers/287TTNZF8L.io.nekohasekai.sfavt/configs/`; `~/.config/singbox/config.json` may not exist.
+- `config_1.json` contained the active routing shape observed on 2026-07-24, including `[KR] SCOPE`, but confirm the selected profile before editing because SFM manages these files.
+- When the API is available in `rule` mode, selector group `Default` controls the route used by Codex/browser requests.
 
 ## Useful Commands
 
@@ -25,7 +26,17 @@ Inspect app and proxy state:
 ps aux | rg -i 'SFM|sing-box|singbox|mihomo|clash|7890|9090'
 scutil --proxy
 lsof -nP -iTCP:7890 -sTCP:LISTEN
-curl -s --max-time 5 http://127.0.0.1:9090/configs
+curl -sS --max-time 5 http://127.0.0.1:9090/configs
+find "$HOME/Library/Group Containers/287TTNZF8L.io.nekohasekai.sfavt/configs" \
+  -maxdepth 1 -name 'config*.json' -print
+```
+
+If port `9090` refuses the connection, do not assume SFM is stopped. Inspect the app and system extension instead:
+
+```bash
+ps aux | rg -i '/Applications/SFM|io\.nekohasekai|sing-box'
+log show --last 20m --style compact \
+  --predicate 'process == "SFM" OR process == "io.nekohasekai.sfavt.system"'
 ```
 
 List selector groups:
@@ -50,6 +61,44 @@ Test a domain through the local proxy:
 curl -x http://127.0.0.1:7890 -I -L --max-time 20 https://invite.linuxdo.org/
 ```
 
+## KR SCOPE IPv6 Case
+
+Observed on 2026-07-24:
+
+- `[KR] SCOPE` is a Hysteria2 outbound to `link.lmxu.cc:8442`; the server hostname resolved only to IPv4. This is normal because IPv6 destinations are carried inside the Hysteria2 tunnel.
+- The client had native IPv6 and a valid SFM TUN IPv6 default route. IPv4 HTTPS succeeded, while IPv6 HTTPS reached TLS and then failed with `SSL_ERROR_SYSCALL`.
+- The server is reachable through SSH alias `lmxu-cloud` as user `ubuntu`; if Tailscale DNS is unavailable, use public IPv4 `43.133.225.216` with the same SSH identity settings.
+- The server service is `sing-box-lmxu.service`; Hysteria2 listens on UDP `8442`.
+- Before cloud IPv6 was enabled, `eth0` had no public IPv6 or IPv6 default route. The only global-looking IPv6 was Tailscale ULA `fd7a:115c:a1e0::/48`, which cannot reach the public IPv6 Internet. Server-side `ping -6` returned `Network is unreachable`, causing sing-box to close proxied IPv6 connections immediately.
+- After cloud IPv6 was enabled, `eth0` received a public `240d:` address and a default route via a link-local gateway. Server-side and client-through-proxy IPv6 HTTPS both succeeded without sing-box changes.
+
+Use this read-only workflow for similar failures:
+
+```bash
+# Client: compare address families through the active SFM route.
+curl -4 -sS -o /dev/null --connect-timeout 5 --max-time 12 \
+  -w 'IPv4 %{http_code} %{remote_ip}\n' https://www.cloudflare.com
+curl -6 -sS -o /dev/null --connect-timeout 5 --max-time 12 \
+  -w 'IPv6 %{http_code} %{remote_ip}\n' https://www.cloudflare.com
+
+# Server: verify a public address, default route, outbound IPv6, and listener.
+ssh -o BatchMode=yes lmxu-cloud '
+  ip -6 addr show scope global
+  ip -6 route show
+  ping -6 -c 2 -W 3 2606:4700:4700::1111
+  curl -6 -sS -o /dev/null --connect-timeout 5 --max-time 12 \
+    -w "IPv6 %{http_code} %{remote_ip}\\n" https://ipv6.google.com
+  ss -lunp | grep ":8442"
+'
+```
+
+Interpretation:
+
+- No public IPv6 and no `default` IPv6 route: enable IPv6 in the cloud network first; sing-box routing changes will not fix the server egress.
+- Public IPv6 and default route exist, but `ping -6`/`curl -6` fail: inspect cloud security rules, host firewall, neighbor discovery, and provider routing.
+- Server IPv6 succeeds but client IPv6 fails: inspect sing-box logs and Hysteria2/QUIC path next.
+- `RootHelperXPC: findConnectionOwner error` means SFM could not attribute a flow to an app; it is not evidence that the network connection failed.
+
 ## Linux.do Invite Case
 
 Observed behavior on 2026-07-07:
@@ -72,12 +121,13 @@ Recommended workflow for similar cases:
 
 Observed during PKU campus-network debugging on 2026-07-08:
 
-- Edit only `~/.config/singbox/config.json` when the user asks for persistent config changes. Do not edit SFM cache/profile copies under Group Containers.
-- Validate after every config edit:
+- When the user asks for persistent config changes, first identify the currently selected SFM profile under `~/Library/Group Containers/287TTNZF8L.io.nekohasekai.sfavt/configs/`. Do not assume `~/.config/singbox/config.json` exists.
+- SFM manages profile files and may rewrite them. Make a timestamped backup of the selected profile before editing, then validate that exact path:
 
 ```bash
-python3 -m json.tool ~/.config/singbox/config.json >/tmp/singbox-config-check.json
-sing-box check -c ~/.config/singbox/config.json
+CONFIG="$HOME/Library/Group Containers/287TTNZF8L.io.nekohasekai.sfavt/configs/config_1.json"
+python3 -m json.tool "$CONFIG" >/tmp/singbox-config-check.json
+sing-box check -c "$CONFIG"
 ```
 
 Important working model:
@@ -161,7 +211,7 @@ Run bundled scripts from the skill directory:
 python3 scripts/list_sfm_routes.py
 python3 scripts/set_sfm_route.py Default Direct-Out
 python3 scripts/test_sfm_routes.py https://invite.linuxdo.org/ Direct-Out 'SG-Z1'
-python3 scripts/check_config_health.py ~/.config/singbox/config.json
+python3 scripts/check_config_health.py "$HOME/Library/Group Containers/287TTNZF8L.io.nekohasekai.sfavt/configs/config_1.json"
 ```
 
 Scripts assume the Clash API is at `http://127.0.0.1:9090` and the local HTTP proxy is `http://127.0.0.1:7890`. Override with:
@@ -172,8 +222,8 @@ CLASH_API=http://127.0.0.1:9090 LOCAL_PROXY=http://127.0.0.1:7890 python3 script
 
 ## Safety
 
-- Do not edit `~/.config/singbox/config.json` unless the user explicitly asks for a persistent rule.
-- Before editing the persistent config, read the latest file and make a timestamped backup.
+- Do not edit an SFM profile unless the user explicitly asks for a persistent rule.
+- Before editing, identify the selected profile, read its latest contents, and make a timestamped backup.
 - For temporary testing, prefer the Clash API selector endpoint over config file edits.
 - Always restore the previous selector if the route change was only for testing.
 - Do not print secrets or full proxy server credentials from config files.
