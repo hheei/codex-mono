@@ -4,7 +4,7 @@ This plugin exposes three MCP tools: `host_list`, `host_exec`, and `host_mount`.
 
 `host_list` reads the user's `~/.ssh/config` and recursively included files. It returns explicit aliases in first-seen order, skips wildcard and negated patterns, and does not read the system SSH config or run SSH.
 
-`host_exec` runs one complete command string on a specified host using the remote account's default shell. It accepts optional `cwd` and `timeoutMs` (1 to 300000 milliseconds), captures stdout and stderr, and returns remote non-zero exit codes as structured data. It is non-interactive and does not support sudo or password prompts.
+`host_exec` runs one complete command string on a specified host using the remote account's default shell. It accepts optional `cwd` and `timeoutMs` (1 to 300000 milliseconds), captures stdout and stderr, and returns remote non-zero exit codes as structured data. It is non-interactive and does not support sudo or password prompts. `host_exec` reuses a plugin-owned OpenSSH ControlMaster per host with `ControlPersist=60m`; `host_mount` uses a separate SSHFS connection and does not share that mux.
 
 For every SSH remote file read, write, edit, search, listing, or inspection request, call `host_mount` first and then use built-in local file tools under one of the returned paths. It mounts the remote root (`<host>:/`) under `~/.cache/sshfs-addon/<host>/` and returns `localPath` plus `remoteHomeLocalPath`, the local path corresponding to the remote user's home directory.
 

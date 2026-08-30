@@ -105,12 +105,7 @@ export class SshfsManager {
 			: `cd -- ${quoteShellWord(input.cwd)} && ${input.command}`;
 		let response: ProcessResult;
 		try {
-			response = await this.#runner("ssh", [
-				...sshArguments(),
-				"--",
-				host,
-				remoteCommand,
-			], timeoutMs);
+			response = await this.runMuxSsh(host, remoteCommand, timeoutMs);
 		} catch (error) {
 			throw new Error(`Unable to start SSH for ${host}: ${error instanceof Error ? error.message : String(error)}`);
 		}
@@ -228,11 +223,7 @@ export class SshfsManager {
 		let lastResponse: ProcessResult | undefined;
 		for (let attempt = 0; attempt < 2; attempt += 1) {
 			if (Date.now() >= deadline) break;
-			lastResponse = await this.run("ssh", [
-				...sshArguments(),
-				host,
-				"printf %s \"$HOME\"",
-			], CONNECTIVITY_QUERY_TIMEOUT_MS, deadline);
+			lastResponse = await this.runMuxSsh(host, "printf %s \"$HOME\"", CONNECTIVITY_QUERY_TIMEOUT_MS, deadline);
 			if (lastResponse.exitCode === 0 && lastResponse.stdout.trim()) break;
 			if (attempt === 0 && Date.now() + HEALTH_RETRY_MS < deadline) await delay(HEALTH_RETRY_MS);
 		}
@@ -246,6 +237,37 @@ export class SshfsManager {
 		const remoteHome = posix.normalize(lastResponse.stdout.trim());
 		if (!posix.isAbsolute(remoteHome)) throw new Error(`Invalid remote home for ${host}`);
 		return remoteHome;
+	}
+
+	private async ensureExecControlDirectory(): Promise<string> {
+		await ensureDirectory(this.#mountRoot);
+		const controlRoot = join(this.#mountRoot, "control");
+		await ensureDirectory(controlRoot);
+		return resolve(controlRoot);
+	}
+
+	private async runMuxSsh(
+		host: string,
+		remoteCommand: string,
+		timeoutMs: number,
+		deadline?: number,
+	): Promise<ProcessResult> {
+		const invoke = async (args: string[]): Promise<ProcessResult> => deadline === undefined
+			? await this.#runner("ssh", args, timeoutMs)
+			: await this.run("ssh", args, timeoutMs, deadline);
+		const commandArgs = async (): Promise<string[]> => {
+			const controlPath = join(await this.ensureExecControlDirectory(), "%C");
+			return [...sshArguments(controlPath), "--", host, remoteCommand];
+		};
+
+		const response = await invoke(await commandArgs());
+		if (response.timedOut || response.exitCode !== 255 || !isMuxSocketFailure(response.stderr)) {
+			return response;
+		}
+
+		const controlPath = join(await this.ensureExecControlDirectory(), "%C");
+		await invoke([...sshArguments(controlPath), "-O", "exit", "--", host]).catch(() => undefined);
+		return await invoke(await commandArgs());
 	}
 
 	private async probeMount(localPath: string, source: string, deadline: number): Promise<MountProbe> {
@@ -312,7 +334,7 @@ export class SshfsManager {
 	}
 }
 
-function sshArguments(): string[] {
+function sshArguments(controlPath: string): string[] {
 	return [
 		"-n",
 		"-o", "ServerAliveInterval=300",
@@ -321,6 +343,9 @@ function sshArguments(): string[] {
 		"-o", "ConnectionAttempts=1",
 		"-o", "BatchMode=yes",
 		"-o", "StrictHostKeyChecking=accept-new",
+		"-o", "ControlMaster=auto",
+		"-o", `ControlPath=${controlPath}`,
+		"-o", "ControlPersist=60m",
 	];
 }
 
@@ -330,6 +355,10 @@ function quoteShellWord(value: string): string {
 
 function isSshDiagnostic(stderr: string): boolean {
 	return /(?:^|\n)ssh:|Could not resolve hostname|connect to host|Permission denied \(publickey|Host key verification failed/i.test(stderr);
+}
+
+function isMuxSocketFailure(stderr: string): boolean {
+	return /Control socket connect failed|mux_client|ControlPath/i.test(stderr);
 }
 
 function findMountEntry(output: string, localPath: string): MountEntry | undefined {

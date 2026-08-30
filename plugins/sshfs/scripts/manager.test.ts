@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -94,10 +94,17 @@ function fail(stderr: string): ProcessResult {
 	return { exitCode: 1, stdout: "", stderr };
 }
 
+function expectMuxArguments(args: string[] | undefined, mountRoot: string): void {
+	expect(args).toContain("ControlMaster=auto");
+	expect(args).toContain(`ControlPath=${join(mountRoot, "control", "%C")}`);
+	expect(args).toContain("ControlPersist=60m");
+}
+
 describe("sshfs manager", () => {
 	test("executes a complete command through the host default shell", async () => {
+		const mountRoot = await temporaryMountRoot();
 		const host = harness();
-		const manager = new SshfsManager({ runner: host.runner });
+		const manager = new SshfsManager({ mountRoot, runner: host.runner });
 		host.setSshResult({ exitCode: 7, stdout: "out", stderr: "err" });
 
 		await expect(manager.execOnHost({ host: "prod", command: "printf 'a b'", cwd: "/tmp/a'b", timeoutMs: 1234 })).resolves.toEqual({
@@ -110,16 +117,15 @@ describe("sshfs manager", () => {
 			timedOut: false,
 		});
 		const call = host.calls.find((entry) => entry.command === "ssh");
-		expect(call?.args).toEqual([
-			"-n", "-o", "ServerAliveInterval=300", "-o", "ServerAliveCountMax=1", "-o", "ConnectTimeout=15",
-			"-o", "ConnectionAttempts=1", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new",
-			"--", "prod", "cd -- '/tmp/a'\\''b' && printf 'a b'",
-		]);
+		expectMuxArguments(call?.args, mountRoot);
+		expect(call?.args?.slice(-2)).toEqual(["prod", "cd -- '/tmp/a'\\''b' && printf 'a b'"]);
+		expect((await lstat(join(mountRoot, "control"))).mode & 0o777).toBe(0o700);
 	});
 
 	test("returns a remote non-zero exit and rejects diagnostic failures", async () => {
+		const mountRoot = await temporaryMountRoot();
 		const host = harness();
-		const manager = new SshfsManager({ runner: host.runner });
+		const manager = new SshfsManager({ mountRoot, runner: host.runner });
 		host.setSshResult({ exitCode: 255, stdout: "", stderr: "Could not resolve hostname offline" });
 		await expect(manager.execOnHost({ host: "offline", command: "true" })).rejects.toThrow("not reachable");
 
@@ -128,8 +134,9 @@ describe("sshfs manager", () => {
 	});
 
 	test("rejects invalid exec input and reports timeout", async () => {
+		const mountRoot = await temporaryMountRoot();
 		const host = harness();
-		const manager = new SshfsManager({ runner: host.runner });
+		const manager = new SshfsManager({ mountRoot, runner: host.runner });
 		await expect(manager.execOnHost({ host: "prod", command: "" })).rejects.toThrow("non-empty");
 		await expect(manager.execOnHost({ host: "prod", command: "id", timeoutMs: 300001 })).rejects.toThrow("between 1 and 300000");
 		host.setSshResult({ exitCode: null, stdout: "", stderr: "", timedOut: true });
@@ -137,17 +144,37 @@ describe("sshfs manager", () => {
 	});
 
 	test("rejects runner failures and truncates oversized output", async () => {
-		const rejected = new SshfsManager({ runner: async () => { throw new Error("runner failed"); } });
+		const mountRoot = await temporaryMountRoot();
+		const rejected = new SshfsManager({ mountRoot, runner: async () => { throw new Error("runner failed"); } });
 		await expect(rejected.execOnHost({ host: "prod", command: "id" })).rejects.toThrow("runner failed");
 
 		const head = "a".repeat(5 * 1024);
 		const tail = "b".repeat(5 * 1024);
 		const oversized = new SshfsManager({
+			mountRoot,
 			runner: async () => ({ exitCode: 0, stdout: `${head}${"x".repeat(64 * 1024)}${tail}`, stderr: `${head}${"y".repeat(64 * 1024)}${tail}` }),
 		});
 		const result = await oversized.execOnHost({ host: "prod", command: "id" });
 		expect(result.stdout).toBe(`${head}\n...[output truncated; omitted 64 KiB]...\n${tail}`);
 		expect(result.stderr).toBe(`${head}\n...[output truncated; omitted 64 KiB]...\n${tail}`);
+	});
+
+	test("clears a stale mux socket and retries the original exec command once", async () => {
+		const mountRoot = await temporaryMountRoot();
+		const host = harness();
+		host.setSshResults([
+			{ exitCode: 255, stdout: "", stderr: "mux_client: Control socket connect failed" },
+			{ exitCode: 1, stdout: "", stderr: "ignored" },
+			{ exitCode: 0, stdout: "ok", stderr: "" },
+		]);
+		const manager = new SshfsManager({ mountRoot, runner: host.runner });
+
+		await expect(manager.execOnHost({ host: "prod", command: "true" })).resolves.toMatchObject({ exitCode: 0, stdout: "ok" });
+		const calls = host.calls.filter((call) => call.command === "ssh");
+		expect(calls).toHaveLength(3);
+		expect(calls[0].args).toEqual(calls[2].args);
+		expect(calls[1].args).toContain("-O");
+		expect(calls[1].args).toContain("exit");
 	});
 
 	test("mounts a remote root and reuses the healthy shared mount", async () => {
@@ -167,8 +194,10 @@ describe("sshfs manager", () => {
 		expect(second.status).toBe("reused");
 		expect(host.calls.filter((call) => call.command === "sshfs")).toHaveLength(1);
 		expect(host.calls.filter((call) => call.command === "ssh")).toHaveLength(2);
-		expect(host.calls.find((call) => call.command === "ssh")?.args).toContain("ConnectTimeout=15");
-		expect(host.calls.find((call) => call.command === "sshfs")?.args).toContain("ConnectTimeout=30");
+		expectMuxArguments(host.calls.find((call) => call.command === "ssh")?.args, mountRoot);
+		const sshfsArgs = host.calls.find((call) => call.command === "sshfs")?.args;
+		expect(sshfsArgs).toContain("ConnectTimeout=30");
+		expect(sshfsArgs?.some((arg) => arg.includes("ControlMaster") || arg.includes("ControlPath") || arg.includes("ControlPersist"))).toBe(false);
 	});
 
 	test("refuses a mountpoint occupied by another filesystem", async () => {
@@ -267,6 +296,25 @@ describe("sshfs manager", () => {
 
 		expect((await manager.ensureMounted("recovering")).status).toBe("mounted");
 		expect(host.calls.filter((call) => call.command === "ssh")).toHaveLength(2);
+		expect(host.calls.filter((call) => call.command === "sshfs")).toHaveLength(1);
+	});
+
+	test("clears a stale mux socket during the remote-home query and mounts once", async () => {
+		const mountRoot = await temporaryMountRoot();
+		const host = harness();
+		host.setSshResults([
+			{ exitCode: 255, stdout: "", stderr: "mux_client: master unavailable" },
+			ok(),
+			ok("/home/test"),
+		]);
+		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: host.runner });
+
+		expect((await manager.ensureMounted("prod")).status).toBe("mounted");
+		const calls = host.calls.filter((call) => call.command === "ssh");
+		expect(calls).toHaveLength(3);
+		expect(calls[0].args).toEqual(calls[2].args);
+		expect(calls[1].args).toContain("-O");
+		expect(calls[1].args).toContain("exit");
 		expect(host.calls.filter((call) => call.command === "sshfs")).toHaveLength(1);
 	});
 
