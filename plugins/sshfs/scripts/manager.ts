@@ -45,6 +45,7 @@ export interface SshfsManagerOptions {
 	mountRoot?: string;
 	platform?: NodeJS.Platform;
 	runner?: ProcessRunner;
+	environment?: NodeJS.ProcessEnv;
 }
 
 type MountProbe =
@@ -58,6 +59,14 @@ interface MountEntry {
 }
 
 const DEFAULT_MOUNT_ROOT = join(homedir(), ".cache", "sshfs-addon");
+const DEFAULT_EXEC_CONNECT_TIMEOUT_SECONDS = 15;
+const DEFAULT_MOUNT_CONNECT_TIMEOUT_SECONDS = 30;
+const DEFAULT_SERVER_ALIVE_INTERVAL_SECONDS = 300;
+const DEFAULT_EXEC_SERVER_ALIVE_COUNT_MAX = 1;
+const DEFAULT_MOUNT_SERVER_ALIVE_COUNT_MAX = 3;
+const DEFAULT_CONNECTION_ATTEMPTS = 1;
+const DEFAULT_CONTROL_PERSIST = "60m";
+const DEFAULT_STRICT_HOST_KEY_CHECKING = "accept-new";
 const OPERATION_TIMEOUT_MS = 30_000;
 const ROLLBACK_TIMEOUT_MS = 5_000;
 const PROBE_TIMEOUT_MS = 5_000;
@@ -81,9 +90,11 @@ export class SshfsManager {
 	readonly #mountRoot: string;
 	readonly #platform: NodeJS.Platform;
 	readonly #runner: ProcessRunner;
+	readonly #settings: SshfsSettings;
 
 	constructor(options: SshfsManagerOptions = {}) {
-		this.#mountRoot = options.mountRoot ?? DEFAULT_MOUNT_ROOT;
+		this.#settings = readSettings(options.environment ?? process.env);
+		this.#mountRoot = options.mountRoot ?? this.#settings.mountRoot;
 		this.#platform = options.platform ?? process.platform;
 		this.#runner = options.runner ?? runProcess;
 	}
@@ -176,11 +187,12 @@ export class SshfsManager {
 			mountAttempted = true;
 			const result = await this.run("sshfs", [
 				"-o", "reconnect",
-				"-o", "ServerAliveInterval=300",
-				"-o", "ServerAliveCountMax=3",
-				"-o", "ConnectTimeout=30",
+				"-o", `ServerAliveInterval=${this.#settings.serverAliveIntervalSeconds}`,
+				"-o", `ServerAliveCountMax=${this.#settings.mountServerAliveCountMax}`,
+				"-o", `ConnectTimeout=${this.#settings.mountConnectTimeoutSeconds}`,
+				"-o", `ConnectionAttempts=${this.#settings.connectionAttempts}`,
 				"-o", "BatchMode=yes",
-				"-o", "StrictHostKeyChecking=accept-new",
+				"-o", `StrictHostKeyChecking=${this.#settings.strictHostKeyChecking}`,
 				...(this.#platform === "darwin" ? ["-o", "local"] : []),
 				source,
 				localPath,
@@ -257,7 +269,7 @@ export class SshfsManager {
 			: await this.run("ssh", args, timeoutMs, deadline);
 		const commandArgs = async (): Promise<string[]> => {
 			const controlPath = join(await this.ensureExecControlDirectory(), "%C");
-			return [...sshArguments(controlPath), "--", host, remoteCommand];
+			return [...sshArguments(controlPath, this.#settings), "--", host, remoteCommand];
 		};
 
 		const response = await invoke(await commandArgs());
@@ -266,7 +278,7 @@ export class SshfsManager {
 		}
 
 		const controlPath = join(await this.ensureExecControlDirectory(), "%C");
-		await invoke([...sshArguments(controlPath), "-O", "exit", "--", host]).catch(() => undefined);
+		await invoke([...sshArguments(controlPath, this.#settings), "-O", "exit", "--", host]).catch(() => undefined);
 		return await invoke(await commandArgs());
 	}
 
@@ -303,7 +315,7 @@ export class SshfsManager {
 
 	private async unmount(localPath: string, source: string, deadline: number): Promise<MountProbe | undefined> {
 		const strategies = this.#platform === "linux"
-			? [["fusermount", "-u", localPath], ["umount", localPath]]
+			? [["fusermount3", "-u", localPath], ["fusermount", "-u", localPath], ["umount", localPath]]
 			: [["umount", localPath], ["diskutil", "unmount", localPath]];
 		for (const [command, ...args] of strategies) {
 			const result = await this.run(command, args, PROBE_TIMEOUT_MS, deadline).catch(() => undefined);
@@ -334,18 +346,69 @@ export class SshfsManager {
 	}
 }
 
-function sshArguments(controlPath: string): string[] {
+interface SshfsSettings {
+	mountRoot: string;
+	execConnectTimeoutSeconds: number;
+	mountConnectTimeoutSeconds: number;
+	serverAliveIntervalSeconds: number;
+	execServerAliveCountMax: number;
+	mountServerAliveCountMax: number;
+	connectionAttempts: number;
+	controlPersist: string;
+	strictHostKeyChecking: string;
+}
+
+function readSettings(environment: NodeJS.ProcessEnv): SshfsSettings {
+	return {
+		mountRoot: environment.SSHFS_MOUNT_ROOT?.trim() || DEFAULT_MOUNT_ROOT,
+		execConnectTimeoutSeconds: readPositiveInteger(environment, "SSHFS_EXEC_CONNECT_TIMEOUT", DEFAULT_EXEC_CONNECT_TIMEOUT_SECONDS),
+		mountConnectTimeoutSeconds: readPositiveInteger(environment, "SSHFS_MOUNT_CONNECT_TIMEOUT", DEFAULT_MOUNT_CONNECT_TIMEOUT_SECONDS),
+		serverAliveIntervalSeconds: readPositiveInteger(environment, "SSHFS_SERVER_ALIVE_INTERVAL", DEFAULT_SERVER_ALIVE_INTERVAL_SECONDS),
+		execServerAliveCountMax: readNonNegativeInteger(environment, "SSHFS_EXEC_SERVER_ALIVE_COUNT_MAX", DEFAULT_EXEC_SERVER_ALIVE_COUNT_MAX),
+		mountServerAliveCountMax: readNonNegativeInteger(environment, "SSHFS_MOUNT_SERVER_ALIVE_COUNT_MAX", DEFAULT_MOUNT_SERVER_ALIVE_COUNT_MAX),
+		connectionAttempts: readPositiveInteger(environment, "SSHFS_CONNECTION_ATTEMPTS", DEFAULT_CONNECTION_ATTEMPTS),
+		controlPersist: readNonEmptyValue(environment, "SSHFS_CONTROL_PERSIST", DEFAULT_CONTROL_PERSIST),
+		strictHostKeyChecking: readNonEmptyValue(environment, "SSHFS_STRICT_HOST_KEY_CHECKING", DEFAULT_STRICT_HOST_KEY_CHECKING),
+	};
+}
+
+function readPositiveInteger(environment: NodeJS.ProcessEnv, name: string, defaultValue: number): number {
+	const value = environment[name];
+	if (value === undefined || value.trim() === "") return defaultValue;
+	if (!/^\d+$/.test(value) || Number(value) < 1 || !Number.isSafeInteger(Number(value))) {
+		throw new Error(`${name} must be a positive integer`);
+	}
+	return Number(value);
+}
+
+function readNonNegativeInteger(environment: NodeJS.ProcessEnv, name: string, defaultValue: number): number {
+	const value = environment[name];
+	if (value === undefined || value.trim() === "") return defaultValue;
+	if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
+		throw new Error(`${name} must be a non-negative integer`);
+	}
+	return Number(value);
+}
+
+function readNonEmptyValue(environment: NodeJS.ProcessEnv, name: string, defaultValue: string): string {
+	const value = environment[name]?.trim();
+	if (!value) return defaultValue;
+	if (/[\0\r\n]/.test(value)) throw new Error(`${name} must not contain NUL, CR, or LF`);
+	return value;
+}
+
+function sshArguments(controlPath: string, settings: SshfsSettings): string[] {
 	return [
 		"-n",
-		"-o", "ServerAliveInterval=300",
-		"-o", "ServerAliveCountMax=1",
-		"-o", "ConnectTimeout=15",
-		"-o", "ConnectionAttempts=1",
+		"-o", `ServerAliveInterval=${settings.serverAliveIntervalSeconds}`,
+		"-o", `ServerAliveCountMax=${settings.execServerAliveCountMax}`,
+		"-o", `ConnectTimeout=${settings.execConnectTimeoutSeconds}`,
+		"-o", `ConnectionAttempts=${settings.connectionAttempts}`,
 		"-o", "BatchMode=yes",
-		"-o", "StrictHostKeyChecking=accept-new",
+		"-o", `StrictHostKeyChecking=${settings.strictHostKeyChecking}`,
 		"-o", "ControlMaster=auto",
 		"-o", `ControlPath=${controlPath}`,
-		"-o", "ControlPersist=60m",
+		"-o", `ControlPersist=${settings.controlPersist}`,
 	];
 }
 

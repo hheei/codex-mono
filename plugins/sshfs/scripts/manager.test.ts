@@ -38,6 +38,7 @@ function harness() {
 	let sshResult: ProcessResult = { exitCode: 0, stdout: "/home/test", stderr: "" };
 	let sshResults: ProcessResult[] = [];
 	let unmountFails = false;
+	let unavailableUnmountCommands = new Set<string>();
 	let replaceWithConflictOnUnmount = false;
 
 	const runner: ProcessRunner = async (command, args) => {
@@ -60,7 +61,8 @@ function harness() {
 			filesystemSource = undefined;
 			return sshfsResult;
 		}
-		if (command === "fusermount" || command === "umount" || command === "diskutil") {
+		if (command === "fusermount3" || command === "fusermount" || command === "umount" || command === "diskutil") {
+			if (unavailableUnmountCommands.has(command)) return { exitCode: 127, stdout: "", stderr: "not found" };
 			if (!unmountFails) {
 				mounted = replaceWithConflictOnUnmount
 					? { source: "other:/", path: mounted?.path ?? "", type: "fuse.sshfs", healthy: true }
@@ -82,6 +84,7 @@ function harness() {
 		setSshResult: (value: ProcessResult) => { sshResult = value; },
 		setSshResults: (value: ProcessResult[]) => { sshResults = [...value]; },
 		setUnmountFails: (value: boolean) => { unmountFails = value; },
+		setUnavailableUnmountCommands: (value: string[]) => { unavailableUnmountCommands = new Set(value); },
 		setReplaceWithConflictOnUnmount: (value: boolean) => { replaceWithConflictOnUnmount = value; },
 	};
 }
@@ -120,6 +123,42 @@ describe("sshfs manager", () => {
 		expectMuxArguments(call?.args, mountRoot);
 		expect(call?.args?.slice(-2)).toEqual(["prod", "cd -- '/tmp/a'\\''b' && printf 'a b'"]);
 		expect((await lstat(join(mountRoot, "control"))).mode & 0o777).toBe(0o700);
+	});
+
+	test("reads SSHFS environment settings while preserving non-interactive authentication", async () => {
+		const mountRoot = await temporaryMountRoot();
+		const host = harness();
+		const manager = new SshfsManager({
+			mountRoot,
+			platform: "linux",
+			runner: host.runner,
+			environment: {
+				SSHFS_EXEC_CONNECT_TIMEOUT: "9",
+				SSHFS_MOUNT_CONNECT_TIMEOUT: "27",
+				SSHFS_SERVER_ALIVE_INTERVAL: "120",
+				SSHFS_EXEC_SERVER_ALIVE_COUNT_MAX: "2",
+				SSHFS_MOUNT_SERVER_ALIVE_COUNT_MAX: "4",
+				SSHFS_CONNECTION_ATTEMPTS: "3",
+				SSHFS_CONTROL_PERSIST: "10m",
+				SSHFS_STRICT_HOST_KEY_CHECKING: "yes",
+			},
+		});
+
+		await manager.execOnHost({ host: "prod", command: "true" });
+		await manager.ensureMounted("prod");
+		const sshArgs = host.calls.find((call) => call.command === "ssh")?.args;
+		expect(sshArgs).toEqual(expect.arrayContaining([
+			"ServerAliveInterval=120", "ServerAliveCountMax=2", "ConnectTimeout=9", "ConnectionAttempts=3", "ControlPersist=10m", "StrictHostKeyChecking=yes", "BatchMode=yes",
+		]));
+		const sshfsArgs = host.calls.find((call) => call.command === "sshfs")?.args;
+		expect(sshfsArgs).toEqual(expect.arrayContaining([
+			"ServerAliveInterval=120", "ServerAliveCountMax=4", "ConnectTimeout=27", "ConnectionAttempts=3", "StrictHostKeyChecking=yes", "BatchMode=yes",
+		]));
+	});
+
+	test("rejects invalid numeric SSHFS environment settings", () => {
+		expect(() => new SshfsManager({ environment: { SSHFS_EXEC_CONNECT_TIMEOUT: "zero" } }))
+			.toThrow("SSHFS_EXEC_CONNECT_TIMEOUT must be a positive integer");
 	});
 
 	test("returns a remote non-zero exit and rejects diagnostic failures", async () => {
@@ -220,8 +259,21 @@ describe("sshfs manager", () => {
 		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: host.runner });
 
 		expect((await manager.ensureMounted("prod")).status).toBe("mounted");
-		expect(host.calls.some((call) => call.command === "fusermount")).toBe(true);
+		expect(host.calls.some((call) => call.command === "fusermount3")).toBe(true);
 		expect(host.calls.filter((call) => call.command === "sshfs")).toHaveLength(1);
+	});
+
+	test("falls back to the FUSE 2 unmount helper on Linux", async () => {
+		const mountRoot = await temporaryMountRoot();
+		const host = harness();
+		const localPath = join(mountRoot, "prod");
+		host.setMounted({ source: "prod:/", path: localPath, type: "fuse.sshfs", healthy: false });
+		host.setUnavailableUnmountCommands(["fusermount3"]);
+		const manager = new SshfsManager({ mountRoot, platform: "linux", runner: host.runner });
+
+		expect((await manager.ensureMounted("prod")).status).toBe("mounted");
+		expect(host.calls.some((call) => call.command === "fusermount3")).toBe(true);
+		expect(host.calls.some((call) => call.command === "fusermount")).toBe(true);
 	});
 
 	test("ignores a stale mount-table entry whose live source differs", async () => {
