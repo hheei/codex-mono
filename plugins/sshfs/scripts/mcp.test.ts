@@ -6,18 +6,27 @@ const listValue = { hosts: ["prod", "gpu"], configPath: "/tmp/.ssh/config" };
 const execValue = { host: "prod", command: "id", exitCode: 7, stdout: "out", stderr: "err", timedOut: false as const };
 const mountValue = { host: "prod", localPath: "/mounts/prod", remoteHomeLocalPath: "/mounts/prod/home/test", status: "mounted" as const };
 
-test("initialize and tools/list expose the three host tools", async () => {
-	const server = createMcpServer();
+test("initialize and tools/list expose the three host tools when sshfs is available", async () => {
+	const server = createMcpServer({ sshfsAvailable: async () => true });
 	const initialize = await server.handle({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } });
 	const tools = await server.handle({ jsonrpc: "2.0", id: 2, method: "tools/list" });
 	const listed = (tools?.result as { tools: Array<Record<string, unknown>> }).tools;
 
 	expect(initialize?.result).toMatchObject({ serverInfo: { name: "sshfs", version: "0.7.0" } });
 	expect(listed.map((tool) => tool.name)).toEqual(["host_exec", "host_list", "host_mount"]);
+	expect(listed.find((tool) => tool.name === "host_mount")?.description).toContain("Reuses a healthy matching mount; unhealthy mounts are remounted.");
 	for (const tool of listed) {
 		expect(tool.inputSchema).toMatchObject({ type: "object", additionalProperties: false });
 		expect(tool.outputSchema).toMatchObject({ type: "object", additionalProperties: false });
 	}
+});
+
+test("tools/list omits host_mount when sshfs is unavailable", async () => {
+	const server = createMcpServer({ sshfsAvailable: async () => false });
+	const tools = await server.handle({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+	const listed = (tools?.result as { tools: Array<Record<string, unknown>> }).tools;
+
+	expect(listed.map((tool) => tool.name)).toEqual(["host_exec", "host_list"]);
 });
 
 test("tools/call returns structured results for all three tools", async () => {

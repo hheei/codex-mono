@@ -29,6 +29,7 @@ interface McpServerOptions {
 	list?: () => Promise<HostListResult>;
 	exec?: (input: HostExecInput) => Promise<HostExecResult>;
 	mount?: (host: string) => Promise<SshfsResult>;
+	sshfsAvailable?: () => Promise<boolean>;
 }
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -72,9 +73,11 @@ const TOOLS = [{
 		required: ["hosts", "configPath"],
 		additionalProperties: false,
 	},
-}, {
+}];
+
+const MOUNT_TOOL = {
 	name: "host_mount",
-	description: "Mount the remote root of an SSH host for local file tools. Call before remote file reads, writes, edits, searches, listings, or inspections.",
+	description: "Mount the remote root of an SSH host for local file tools. Call before remote file reads, writes, edits, searches, listings, or inspections. Reuses a healthy matching mount; unhealthy mounts are remounted.",
 	inputSchema: {
 		type: "object",
 		properties: { host: { type: "string", minLength: 1 } },
@@ -92,13 +95,14 @@ const TOOLS = [{
 		required: ["host", "localPath", "remoteHomeLocalPath", "status"],
 		additionalProperties: false,
 	},
-}];
+};
 
 export function createMcpServer(options: McpServerOptions = {}) {
 	const manager = new SshfsManager();
 	const list = options.list ?? (() => listConfiguredHosts());
 	const exec = options.exec ?? ((input: HostExecInput) => manager.execOnHost(input));
 	const mount = options.mount ?? ((host: string) => manager.ensureMounted(host));
+	const sshfsAvailable = options.sshfsAvailable ?? isSshfsAvailable;
 	return {
 		async handle(message: JsonRpcRequest): Promise<JsonRpcResponse | undefined> {
 			const id = message.id ?? null;
@@ -114,7 +118,7 @@ export function createMcpServer(options: McpServerOptions = {}) {
 				case "ping":
 					return result(id, {});
 				case "tools/list":
-					return result(id, { tools: TOOLS });
+					return result(id, { tools: [...TOOLS, ...(await sshfsAvailable() ? [MOUNT_TOOL] : [])] });
 				case "tools/call":
 					return await callTool(id, message.params, { list, exec, mount });
 				default:
@@ -122,6 +126,15 @@ export function createMcpServer(options: McpServerOptions = {}) {
 			}
 		},
 	};
+}
+
+async function isSshfsAvailable(): Promise<boolean> {
+	try {
+		const child = Bun.spawn(["sshfs", "--version"], { stdout: "ignore", stderr: "ignore" });
+		return await child.exited === 0;
+	} catch {
+		return false;
+	}
 }
 
 async function callTool(

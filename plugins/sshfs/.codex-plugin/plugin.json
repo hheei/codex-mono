@@ -1,6 +1,6 @@
 {
   "name": "sshfs",
-  "version": "0.7.0",
+  "version": "0.7.0+codex.20260902155101",
   "description": "Discover configured OpenSSH hosts, execute remote commands, and explicitly mount remote files.",
   "author": {
     "name": "hheei",
@@ -18,7 +18,7 @@
   "interface": {
     "displayName": "SSHFS",
     "shortDescription": "Explicitly mount SSH remote files before accessing them.",
-    "longDescription": "This plugin exposes host_list to discover explicit aliases from the user's ~/.ssh/config and included files, host_exec to run non-interactive process or service commands in a host's default shell, and host_mount to mount <host>:/ under ~/.cache/sshfs-addon/<host>/ for local file tools. host_exec does not support sudo or password prompts. Healthy mounts are reused and conflicting filesystems are never unmounted.",
+    "longDescription": "This plugin exposes host_list to discover explicit aliases from the user's ~/.ssh/config and included files, host_exec to run non-interactive process or service commands in a host's default shell, and host_mount when sshfs is available to mount <host>:/ under ~/.cache/sshfs-addon/<host>/ for local file tools. host_exec does not support sudo or password prompts. Healthy mounts are reused and conflicting filesystems are never unmounted.",
     "developerName": "hheei",
     "category": "Productivity",
     "capabilities": [

@@ -10,6 +10,8 @@ Use configured SSH hosts from Codex, with explicit mounts for remote files.
 | `host_exec` | Remote processes and services | Runs one non-interactive command in the remote account's default shell. Supports `cwd` and `timeoutMs` (1-300000 ms); no `sudo` or password prompts. |
 | `host_mount` | Any remote file operation | Mounts `<host>:/` and returns `localPath` plus `remoteHomeLocalPath`. |
 
+`host_mount` is exposed only when `sshfs --version` succeeds when the MCP client lists tools. Restart or refresh the plugin session after installing, removing, or repairing sshfs/macFUSE.
+
 ## Usage Rules
 
 1. Call `host_list` when the host alias is unknown.
