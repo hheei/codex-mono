@@ -1,0 +1,37 @@
+{
+  "name": "cloud-service",
+  "version": "0.3.0",
+  "description": "Operational skills for AxonHub/CLIProxyAPI, sing-box/SFM, Tailscale topology, and related cloud-service maintenance.",
+  "author": {
+    "name": "hheei",
+    "url": "https://github.com/hheei"
+  },
+  "homepage": "https://github.com/hheei/codex-mono",
+  "repository": "https://github.com/hheei/codex-mono",
+  "license": "MIT",
+  "keywords": [
+    "axonhub",
+    "cliproxyapi",
+    "sing-box",
+    "sfm",
+    "tailscale",
+    "networking"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Cloud Service",
+    "shortDescription": "Operate AxonHub, CLIProxyAPI, sing-box, and Tailscale services.",
+    "longDescription": "Reusable operational guidance for the AxonHub AI gateway and CLIProxyAPI upstream, sing-box/SFM profiles, TUN routing, Tailscale endpoints and MagicDNS, DNS policy, selector changes, and subscription updates.",
+    "developerName": "hheei",
+    "category": "Productivity",
+    "capabilities": [
+      "Local Automation",
+      "Networking"
+    ],
+    "defaultPrompt": [
+      "Use $axonhub to inspect or operate the AxonHub and CPA service path.",
+      "Use $singbox to inspect SFM routing.",
+      "Use $singbox to diagnose Tailnet reachability."
+    ]
+  }
+}

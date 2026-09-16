@@ -8,7 +8,7 @@ This is a monorepo for Codex plugins. Each directory under `plugins/` is an inde
 | --- | --- | --- |
 | `atoms-plugin` | `0.1.1` | ASE-based atomistic structure conversion, VASP workflows, and the `ppafm-skill`. Its VASP source is a private submodule. |
 | `my-ppt` | `0.1.0+codex.20260709192819` | Presentation strategy, storytelling, visual direction, deck review, examples, and local slide-plan scripts. |
-| `singbox` | `0.1.0` | Local SFM/sing-box and Clash API routing inspection, selector switching, and domain tests. |
+| `cloud-service` | `0.3.0` | AxonHub/CLIProxyAPI operations, sing-box/SFM, Tailscale topology, DNS/TUN runbooks, and Clash API helpers. |
 | `sshfs` | `0.7.0` | `host_list`, `host_exec`, and `host_mount` for SSH host discovery, remote commands, and shared SSHFS mounts. |
 
 The `sshfs` plugin exposes `host_list`, `host_exec`, and `host_mount`. Use `host_list` for configured aliases, `host_exec` for non-interactive remote process or service commands, and call `host_mount` before any remote file read, write, edit, search, listing, or inspection; it returns `localPath` and `remoteHomeLocalPath` under `~/.cache/sshfs-addon/<host>/`.
@@ -50,7 +50,7 @@ Install the marketplace from GitHub:
 ```bash
 codex plugin marketplace add hheei/codex-mono --ref main
 codex plugin add sshfs@codex-mono
-codex plugin add singbox@codex-mono
+codex plugin add cloud-service@codex-mono
 codex plugin add my-ppt@codex-mono
 ```
 

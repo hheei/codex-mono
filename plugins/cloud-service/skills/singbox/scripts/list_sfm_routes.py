@@ -8,7 +8,12 @@ CLASH_API = os.environ.get("CLASH_API", "http://127.0.0.1:9090").rstrip("/")
 
 
 def get_json(path):
-    with urllib.request.urlopen(f"{CLASH_API}{path}", timeout=5) as response:
+    req = urllib.request.Request(f"{CLASH_API}{path}")
+    secret = os.environ.get("CLASH_API_SECRET")
+    if secret:
+        req.add_header("Authorization", f"Bearer {secret}")
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(req, timeout=5) as response:
         return json.load(response)
 
 

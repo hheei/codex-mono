@@ -1,0 +1,75 @@
+{
+  "source_repository": "https://github.com/SagerNet/sing-box",
+  "source_branch": "testing",
+  "source_revision": "f6ce1d5be042436d2b498d216cef718ea87a1ca8",
+  "source_commit_time": "2026-09-10T22:09:32+08:00",
+  "captured_on": "2026-09-12",
+  "scope": "Eight selected English documentation pages, not a complete website mirror or a release-specific manual.",
+  "transformations": "Markdown link destinations only: included pages become relative local links; uncopied dependencies become absolute online URLs.",
+  "pages": [
+    {
+      "path": "configuration/inbound/tun.md",
+      "url": "https://sing-box.sagernet.org/configuration/inbound/tun/",
+      "source_url": "https://github.com/SagerNet/sing-box/blob/f6ce1d5be042436d2b498d216cef718ea87a1ca8/docs/configuration/inbound/tun.md",
+      "source_sha256": "4f280bee8568e36b4f8a42ad0a76429d5790d3459208388cb20849d42b27ffa2",
+      "sha256": "f021f9fbbf9408aca4d001562debd38c818697f9fc0cbb9f997c8fb0fa930b71",
+      "bytes": 21425
+    },
+    {
+      "path": "configuration/endpoint/tailscale.md",
+      "url": "https://sing-box.sagernet.org/configuration/endpoint/tailscale/",
+      "source_url": "https://github.com/SagerNet/sing-box/blob/f6ce1d5be042436d2b498d216cef718ea87a1ca8/docs/configuration/endpoint/tailscale.md",
+      "source_sha256": "0d4c18477d8be5d0480319b203625bcd58a4922a736822c20ea9ff1cb9de8878",
+      "sha256": "a3a4df725d501f6c8fcc078ae9215b6a3d3e1c38fa9697a70dd9379303b02666",
+      "bytes": 7065
+    },
+    {
+      "path": "configuration/dns/server/tailscale.md",
+      "url": "https://sing-box.sagernet.org/configuration/dns/server/tailscale/",
+      "source_url": "https://github.com/SagerNet/sing-box/blob/f6ce1d5be042436d2b498d216cef718ea87a1ca8/docs/configuration/dns/server/tailscale.md",
+      "source_sha256": "dc59cee9bd8f09077ed278264daf865c6707a86c5eb84775ed55787be072a6e7",
+      "sha256": "3df4fd63727d99f8f0b9c6f078fbaf4fa7be2c3b6d076d29a452688582287b32",
+      "bytes": 2453
+    },
+    {
+      "path": "configuration/dns/rule.md",
+      "url": "https://sing-box.sagernet.org/configuration/dns/rule/",
+      "source_url": "https://github.com/SagerNet/sing-box/blob/f6ce1d5be042436d2b498d216cef718ea87a1ca8/docs/configuration/dns/rule.md",
+      "source_sha256": "f4f2676b7caa2ef5497162e110807249292b22b689bd01df57b494afde2a4737",
+      "sha256": "55d3bcc6bd627c3e34fc34acb9dc8171de608fd7f6f6e4556876c7530558d14f",
+      "bytes": 20027
+    },
+    {
+      "path": "configuration/route/rule.md",
+      "url": "https://sing-box.sagernet.org/configuration/route/rule/",
+      "source_url": "https://github.com/SagerNet/sing-box/blob/f6ce1d5be042436d2b498d216cef718ea87a1ca8/docs/configuration/route/rule.md",
+      "source_sha256": "d6a42182fa716f8a49ad97606f2d75e976581338bccdeb120d9b0a3722670d9a",
+      "sha256": "e1d29616ead17a332711fd5238edc6ffa3eef4c08571bcab5c0cfc73f573ff2a",
+      "bytes": 11843
+    },
+    {
+      "path": "configuration/rule-set/index.md",
+      "url": "https://sing-box.sagernet.org/configuration/rule-set/",
+      "source_url": "https://github.com/SagerNet/sing-box/blob/f6ce1d5be042436d2b498d216cef718ea87a1ca8/docs/configuration/rule-set/index.md",
+      "source_sha256": "1bbb896802f0c45bca0d7dcfb5e25d33259706c607cbe460f7d8b2030556ef1a",
+      "sha256": "f66c92093c49db939c1facca9d1324d124e955fe96b1104661b7d4f5bb8e753a",
+      "bytes": 3496
+    },
+    {
+      "path": "configuration/experimental/clash-api.md",
+      "url": "https://sing-box.sagernet.org/configuration/experimental/clash-api/",
+      "source_url": "https://github.com/SagerNet/sing-box/blob/f6ce1d5be042436d2b498d216cef718ea87a1ca8/docs/configuration/experimental/clash-api.md",
+      "source_sha256": "2404142c4aa7c285bb957b6311219b0f6459b7ce4b81f3d3aeec727ab3f51fd1",
+      "sha256": "2404142c4aa7c285bb957b6311219b0f6459b7ce4b81f3d3aeec727ab3f51fd1",
+      "bytes": 4378
+    },
+    {
+      "path": "migration.md",
+      "url": "https://sing-box.sagernet.org/migration/",
+      "source_url": "https://github.com/SagerNet/sing-box/blob/f6ce1d5be042436d2b498d216cef718ea87a1ca8/docs/migration.md",
+      "source_sha256": "572263117a6fc52f8a2601c5d7b5948ffb0007750dffbeaa5ea4e5a645eed3a2",
+      "sha256": "22914c7d98a3f89c47f6d76532717c9e115f1f6eec65106d7a893148de508ca4",
+      "bytes": 33986
+    }
+  ]
+}

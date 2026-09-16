@@ -29,10 +29,10 @@
       "category": "Productivity"
     },
     {
-      "name": "singbox",
+      "name": "cloud-service",
       "source": {
         "source": "local",
-        "path": "./plugins/singbox"
+        "path": "./plugins/cloud-service"
       },
       "policy": {
         "installation": "AVAILABLE",
